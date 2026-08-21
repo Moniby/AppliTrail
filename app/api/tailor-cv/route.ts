@@ -13,9 +13,9 @@ type ProfilePayload = {
 };
 
 type ResumePayload = {
+  id?: string;
   name: string;
   type: string;
-  dataUrl: string;
 } | null;
 
 type TailorRequest = {
@@ -42,12 +42,11 @@ type OpenAIResponse = {
   output_text?: string;
   output?: Array<{ content?: ResponseContent[] }>;
   error?: { message?: string; code?: string };
+  usage?: { input_tokens?: number; output_tokens?: number };
 };
 
-const OWNER_USER_ID = "c5af96d8-3583-4a56-9877-9841338ec46d";
 const MODEL = "gpt-5.6-sol";
 const MAX_TEXT_LENGTH = 40_000;
-const MAX_FILE_DATA_LENGTH = 4_500_000;
 
 const resultSchema = {
   type: "object",
@@ -159,18 +158,8 @@ function safeError(status: number, code = "") {
 }
 
 export async function POST(request: Request) {
-  const userId = request.headers.get("oai-authenticated-user-id");
-  if (process.env.NODE_ENV === "production" && userId !== OWNER_USER_ID) {
-    return Response.json(
-      {
-        error: userId
-          ? "AI tailoring is available only to the AppliFlow owner."
-          : "Sign in with ChatGPT to use AI tailoring.",
-        signInUrl: userId ? null : "/signin-with-chatgpt?return_to=%2F",
-      },
-      { status: userId ? 403 : 401 },
-    );
-  }
+  const identity = requestUser(request);
+  if (!identity) return authenticationRequired();
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -210,6 +199,16 @@ export async function POST(request: Request) {
     );
   }
 
+  const generation = await beginGeneration(identity, "cv", MODEL);
+  if (!generation.allowed) {
+    return Response.json({
+      error: generation.reason === "rate"
+        ? "Please wait a moment before starting another AI generation."
+        : "You have used this month's AI generation allowance. Extra credits can be added by the AppliFlow administrator.",
+      usage: generation.usage,
+    }, { status: generation.reason === "rate" ? 429 : 402 });
+  }
+
   const userContent: Array<Record<string, string>> = [
     {
       type: "input_text",
@@ -226,17 +225,16 @@ export async function POST(request: Request) {
   ];
 
   const resume = payload.masterCv?.resume;
+  const storedResume = await loadResumeForUser(identity.userId, resume);
   if (
-    resume &&
-    cleanText(resume.name, 300) &&
-    typeof resume.dataUrl === "string" &&
-    resume.dataUrl.startsWith("data:") &&
-    resume.dataUrl.length <= MAX_FILE_DATA_LENGTH
+    storedResume &&
+    cleanText(storedResume.name, 300) &&
+    storedResume.dataUrl.startsWith("data:")
   ) {
     userContent.push({
       type: "input_file",
-      filename: cleanText(resume.name, 300),
-      file_data: resume.dataUrl,
+      filename: cleanText(storedResume.name, 300),
+      file_data: storedResume.dataUrl,
     });
   }
 
@@ -268,10 +266,11 @@ export async function POST(request: Request) {
             schema: resultSchema,
           },
         },
-        safety_identifier: userId ? `appliflow-${userId}` : "appliflow-local",
+        safety_identifier: `appliflow-${identity.userId}`,
       }),
     });
   } catch {
+    await finishGeneration(generation.usageId, "failed").catch(() => undefined);
     return Response.json(
       { error: "AppliFlow could not reach the AI service. Please try again." },
       { status: 502 },
@@ -280,11 +279,13 @@ export async function POST(request: Request) {
 
   const responseBody = (await openAIResponse.json().catch(() => ({}))) as OpenAIResponse;
   if (!openAIResponse.ok) {
+    await finishGeneration(generation.usageId, "failed").catch(() => undefined);
     return Response.json({ error: safeError(openAIResponse.status, responseBody.error?.code) }, { status: openAIResponse.status });
   }
 
   const text = outputText(responseBody);
   if (!text) {
+    await finishGeneration(generation.usageId, "failed").catch(() => undefined);
     return Response.json(
       { error: "The AI service returned an incomplete result. Please regenerate the CV." },
       { status: 502 },
@@ -293,11 +294,16 @@ export async function POST(request: Request) {
 
   try {
     const result = JSON.parse(text) as Record<string, unknown>;
+    await finishGeneration(generation.usageId, "succeeded", responseBody.usage?.input_tokens ?? 0, responseBody.usage?.output_tokens ?? 0);
     return Response.json({ ...result, model: MODEL });
   } catch {
+    await finishGeneration(generation.usageId, "failed").catch(() => undefined);
     return Response.json(
       { error: "The AI result could not be read. Please regenerate the CV." },
       { status: 502 },
     );
   }
 }
+import { beginGeneration, finishGeneration } from "../../../db/appliflow-store";
+import { loadResumeForUser } from "../../../db/resume-storage";
+import { authenticationRequired, requestUser } from "../../request-user";

@@ -22,7 +22,17 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!userId || !email) return null;
+  if (!userId || !email) {
+    if (process.env.NODE_ENV !== "production") {
+      return {
+        userId: "appliflow-local-user",
+        displayName: "Local User",
+        email: "local@appliflow.test",
+        fullName: "Local User",
+      };
+    }
+    return null;
+  }
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =
