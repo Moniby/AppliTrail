@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Careerflow | Job Application Studio",
+  title: "AppliFlow | Job Application Studio",
   description: "Track applications and prepare tailored career materials.",
   icons: {
     icon: "/favicon.svg",
