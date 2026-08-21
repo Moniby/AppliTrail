@@ -24,6 +24,13 @@ test("server-renders the public AppliFlow launch page", async () => {
   assert.match(html, /Private by design/i);
 });
 
+test("uses direct navigation for the protected dashboard handoff", async () => {
+  const landingSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(landingSource, /from "next\/link"/);
+  assert.match(landingSource, /<a className="landing-signin" href="\/app">Open dashboard<\/a>/);
+  assert.match(landingSource, /chatGPTSignInPath\("\/app"\)/);
+});
+
 test("declares portable account, database and file-storage boundaries", async () => {
   const [hostingText, schema, stateRoute, resumeRoute, adminRoute, dashboard, phaseThreeMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
