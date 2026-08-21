@@ -202,11 +202,13 @@ export async function POST(request: Request) {
   const generation = await beginGeneration(identity, "cv", MODEL);
   if (!generation.allowed) {
     return Response.json({
-      error: generation.reason === "rate"
+      error: generation.reason === "suspended"
+        ? "This AppliFlow account is suspended. Contact the administrator for help."
+        : generation.reason === "rate"
         ? "Please wait a moment before starting another AI generation."
         : "You have used this month's AI generation allowance. Extra credits can be added by the AppliFlow administrator.",
-      usage: generation.usage,
-    }, { status: generation.reason === "rate" ? 429 : 402 });
+      usage: "usage" in generation ? generation.usage : undefined,
+    }, { status: generation.reason === "suspended" ? 403 : generation.reason === "rate" ? 429 : 402 });
   }
 
   const userContent: Array<Record<string, string>> = [

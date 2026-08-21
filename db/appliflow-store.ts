@@ -11,6 +11,7 @@ export type AccountRecord = Identity & {
   monthlyAllowance: number;
   bonusCredits: number;
   isAdmin: boolean;
+  accountStatus: "active" | "suspended";
   termsAcceptedAt: string | null;
   privacyAcceptedAt: string | null;
 };
@@ -44,6 +45,7 @@ export async function ensureSchema() {
         monthly_allowance INTEGER NOT NULL DEFAULT 20,
         bonus_credits INTEGER NOT NULL DEFAULT 0,
         is_admin INTEGER NOT NULL DEFAULT 0,
+        account_status TEXT NOT NULL DEFAULT 'active',
         terms_accepted_at TEXT,
         privacy_accepted_at TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -71,6 +73,15 @@ export async function ensureSchema() {
       db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage(user_id, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_status_created ON ai_usage(status, created_at)"),
     ]);
+    const userColumns = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+    if (!userColumns.results.some((column) => column.name === "account_status")) {
+      try {
+        await db.prepare("ALTER TABLE users ADD COLUMN account_status TEXT NOT NULL DEFAULT 'active'").run();
+      } catch {
+        const currentColumns = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
+        if (!currentColumns.results.some((column) => column.name === "account_status")) throw new Error("The account-status migration could not be applied.");
+      }
+    }
     await db.prepare("PRAGMA optimize").run();
   })().catch((error) => {
     schemaPromise = null;
@@ -100,7 +111,7 @@ export async function ensureUser(identity: Identity): Promise<AccountRecord> {
 export async function getAccount(userId: string): Promise<AccountRecord> {
   await ensureSchema();
   const row = await getD1().prepare(`SELECT id, email, display_name, plan, monthly_allowance,
-      bonus_credits, is_admin, terms_accepted_at, privacy_accepted_at
+      bonus_credits, is_admin, account_status, terms_accepted_at, privacy_accepted_at
       FROM users WHERE id = ?`).bind(userId).first<Record<string, unknown>>();
   if (!row) throw new Error("AppliFlow account could not be created.");
   return {
@@ -111,6 +122,7 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
     monthlyAllowance: Number(row.monthly_allowance),
     bonusCredits: Number(row.bonus_credits),
     isAdmin: Boolean(row.is_admin),
+    accountStatus: row.account_status === "suspended" ? "suspended" : "active",
     termsAcceptedAt: row.terms_accepted_at ? String(row.terms_accepted_at) : null,
     privacyAcceptedAt: row.privacy_accepted_at ? String(row.privacy_accepted_at) : null,
   };
@@ -169,6 +181,9 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
 
 export async function beginGeneration(identity: Identity, kind: string, model: string) {
   const account = await ensureUser(identity);
+  if (account.accountStatus === "suspended") {
+    return { allowed: false as const, reason: "suspended" as const, account };
+  }
   const usage = await getUsageSummary(identity.userId);
   if (usage.remaining <= 0) return { allowed: false as const, reason: "quota", usage };
 
@@ -223,19 +238,21 @@ export async function adminSummary(identity: Identity) {
   const db = getD1();
   const totals = await db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
+      (SELECT COUNT(*) FROM users WHERE account_status = 'suspended') AS suspended,
       (SELECT COUNT(*) FROM ai_usage WHERE status = 'succeeded') AS generations,
       (SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM ai_usage WHERE status = 'succeeded') AS tokens`)
-    .first<{ users: number; generations: number; tokens: number }>();
+    .first<{ users: number; suspended: number; generations: number; tokens: number }>();
   const rows = await db.prepare(`SELECT u.id, u.email, u.display_name, u.plan, u.monthly_allowance,
-      u.bonus_credits, u.created_at, COUNT(a.id) AS generations
+      u.bonus_credits, u.account_status, u.created_at, u.updated_at, COUNT(a.id) AS generations
       FROM users u LEFT JOIN ai_usage a ON a.user_id = u.id AND a.status = 'succeeded'
       GROUP BY u.id ORDER BY u.created_at DESC LIMIT 100`).all<Record<string, unknown>>();
   return {
-    totals: { users: Number(totals?.users ?? 0), generations: Number(totals?.generations ?? 0), tokens: Number(totals?.tokens ?? 0) },
+    totals: { users: Number(totals?.users ?? 0), suspended: Number(totals?.suspended ?? 0), generations: Number(totals?.generations ?? 0), tokens: Number(totals?.tokens ?? 0) },
     users: rows.results.map((row) => ({
       id: String(row.id), email: String(row.email), displayName: String(row.display_name), plan: String(row.plan),
       monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),
-      generations: Number(row.generations), createdAt: String(row.created_at),
+      accountStatus: row.account_status === "suspended" ? "suspended" : "active",
+      generations: Number(row.generations), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
     })),
   };
 }
@@ -246,4 +263,13 @@ export async function grantBonusCredits(identity: Identity, targetUserId: string
   const safeAmount = Math.max(0, Math.min(500, Math.round(amount)));
   await getD1().prepare(`UPDATE users SET bonus_credits = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .bind(safeAmount, targetUserId).run();
+}
+
+export async function setAccountStatus(identity: Identity, targetUserId: string, status: "active" | "suspended") {
+  const account = await ensureUser(identity);
+  if (!account.isAdmin) throw new Error("Administrator access is required.");
+  if (targetUserId === identity.userId) throw new Error("You cannot suspend your own administrator account.");
+  if (status !== "active" && status !== "suspended") throw new Error("Choose a valid account status.");
+  await getD1().prepare(`UPDATE users SET account_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .bind(status, targetUserId).run();
 }

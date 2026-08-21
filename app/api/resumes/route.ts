@@ -10,7 +10,8 @@ export async function POST(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
-    await ensureUser(identity);
+    const account = await ensureUser(identity);
+    if (account.accountStatus === "suspended") return Response.json({ error: "This AppliFlow account is suspended." }, { status: 403 });
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return Response.json({ error: "Choose a resume to upload." }, { status: 400 });
@@ -32,6 +33,8 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
+  const account = await ensureUser(identity);
+  if (account.accountStatus === "suspended") return Response.json({ error: "This AppliFlow account is suspended." }, { status: 403 });
   const id = validResumeId(new URL(request.url).searchParams.get("id"));
   if (!id) return Response.json({ error: "A valid resume is required." }, { status: 400 });
   const object = await getResumeBucket().get(resumeKey(identity.userId, id));
@@ -47,6 +50,8 @@ export async function GET(request: Request) {
 export async function DELETE(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
+  const account = await ensureUser(identity);
+  if (account.accountStatus === "suspended") return Response.json({ error: "This AppliFlow account is suspended." }, { status: 403 });
   const id = validResumeId(new URL(request.url).searchParams.get("id"));
   if (!id) return Response.json({ error: "A valid resume is required." }, { status: 400 });
   await getResumeBucket().delete(resumeKey(identity.userId, id));

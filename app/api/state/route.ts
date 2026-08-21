@@ -9,6 +9,15 @@ function text(value: unknown, maximum = 40_000) {
   return typeof value === "string" ? value.slice(0, maximum) : "";
 }
 
+function safeJobUrl(value: unknown) {
+  const candidate = text(value, 1000).trim();
+  if (!candidate) return "";
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+  } catch { return ""; }
+}
+
 function cleanProfile(value: unknown) {
   const profile = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
@@ -43,9 +52,10 @@ function cleanState(value: unknown) {
     const app = item && typeof item === "object" ? item as Record<string, unknown> : {};
     const stage = text(app.stage, 80);
     const safe = { ...app } as Record<string, unknown>;
-    for (const [key, maximum] of Object.entries({ company: 300, role: 300, sector: 300, location: 500, url: 1000, description: 40_000, date: 30, phoneDate: 30, phoneTime: 30, phoneTimeZone: 100, interviewDate: 30, interviewTime: 30, interviewTimeZone: 100 })) {
+    for (const [key, maximum] of Object.entries({ company: 300, role: 300, sector: 300, location: 500, description: 40_000, date: 30, phoneDate: 30, phoneTime: 30, phoneTimeZone: 100, interviewDate: 30, interviewTime: 30, interviewTimeZone: 100 })) {
       safe[key] = text(app[key], maximum);
     }
+    safe.url = safeJobUrl(app.url);
     safe.id = Number.isFinite(Number(app.id)) ? Number(app.id) : Date.now();
     safe.stage = STAGES.has(stage) ? stage : "Saved";
     safe.masterCvId = masterIds.has(text(app.masterCvId, 100)) ? text(app.masterCvId, 100) : fallbackMasterId;
@@ -53,7 +63,12 @@ function cleanState(value: unknown) {
     return safe;
   });
   const activeMasterCvId = masterIds.has(text(state.activeMasterCvId, 100)) ? text(state.activeMasterCvId, 100) : fallbackMasterId;
-  return { schemaVersion: 2, apps, masterCvs, activeMasterCvId };
+  const rawPreferences = state.preferences && typeof state.preferences === "object" ? state.preferences as Record<string, unknown> : {};
+  const preferences = {
+    reminderDaysBefore: Math.max(1, Math.min(30, Math.round(Number(rawPreferences.reminderDaysBefore) || 3))),
+    followUpDays: Math.max(3, Math.min(60, Math.round(Number(rawPreferences.followUpDays) || 7))),
+  };
+  return { schemaVersion: 3, apps, masterCvs, activeMasterCvId, preferences };
 }
 
 export async function GET(request: Request) {
@@ -61,6 +76,7 @@ export async function GET(request: Request) {
   if (!identity) return authenticationRequired();
   try {
     const account = await ensureUser(identity);
+    if (account.accountStatus === "suspended") return Response.json({ error: "This AppliFlow account is suspended. Contact the administrator for help." }, { status: 403 });
     const [stored, usage] = await Promise.all([getUserState(identity.userId), getUsageSummary(identity.userId)]);
     return Response.json({ account, usage, hasState: Boolean(stored), state: stored?.state ?? null, updatedAt: stored?.updatedAt ?? null });
   } catch {
@@ -72,7 +88,8 @@ export async function PUT(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
-    await ensureUser(identity);
+    const account = await ensureUser(identity);
+    if (account.accountStatus === "suspended") return Response.json({ error: "This AppliFlow account is suspended. Contact the administrator for help." }, { status: 403 });
     const payload = await request.json() as { state?: unknown };
     const state = cleanState(payload.state);
     if (!state.masterCvs.length) return Response.json({ error: "Keep at least one Master CV in your account." }, { status: 400 });

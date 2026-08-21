@@ -25,12 +25,14 @@ test("server-renders the public AppliFlow launch page", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, dashboard] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, adminRoute, dashboard, phaseThreeMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/resumes/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0001_free_bucky.sql", import.meta.url), "utf8"),
   ]);
   const hosting = JSON.parse(hostingText);
   assert.equal(hosting.d1, "DB");
@@ -38,8 +40,15 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(schema, /sqliteTable\("users"/);
   assert.match(schema, /sqliteTable\("user_states"/);
   assert.match(schema, /sqliteTable\(\s*"ai_usage"/);
+  assert.match(schema, /accountStatus: text\("account_status"\)/);
   assert.match(stateRoute, /requestUser\(request\)/);
+  assert.match(stateRoute, /url\.protocol === "https:" \|\| url\.protocol === "http:"/);
   assert.match(resumeRoute, /resumeKey\(identity\.userId/);
+  assert.match(adminRoute, /setAccountStatus/);
+  assert.match(phaseThreeMigration, /ALTER TABLE `users` ADD `account_status`/);
   assert.match(dashboard, /Import my data/);
   assert.match(dashboard, /Delete account data/);
+  assert.match(dashboard, /Add to calendar/);
+  assert.match(dashboard, /Suspend/);
+  assert.match(dashboard, /AppliFlow does not scrape LinkedIn/);
 });

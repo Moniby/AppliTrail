@@ -9,6 +9,7 @@ export const users = sqliteTable("users", {
   monthlyAllowance: integer("monthly_allowance").notNull().default(20),
   bonusCredits: integer("bonus_credits").notNull().default(0),
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+  accountStatus: text("account_status").notNull().default("active"),
   termsAcceptedAt: text("terms_accepted_at"),
   privacyAcceptedAt: text("privacy_accepted_at"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
