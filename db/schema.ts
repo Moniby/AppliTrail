@@ -13,6 +13,7 @@ export const users = sqliteTable("users", {
   termsAcceptedAt: text("terms_accepted_at"),
   privacyAcceptedAt: text("privacy_accepted_at"),
   subscriptionStatus: text("subscription_status").notNull().default("free"),
+  billingInterval: text("billing_interval").notNull().default("monthly"),
   billingPeriodStart: text("billing_period_start"),
   billingPeriodEnd: text("billing_period_end"),
   cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" }).notNull().default(false),

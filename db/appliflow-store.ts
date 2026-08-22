@@ -7,6 +7,7 @@ export type Identity = {
 };
 
 export type PlanId = "free" | "basic" | "standard";
+export type BillingInterval = "monthly" | "quarterly" | "six_month" | "annual";
 
 export const PLAN_CATALOG = {
   free: { id: "free", name: "Free", allowance: 2, amountCents: 0 },
@@ -14,10 +15,36 @@ export const PLAN_CATALOG = {
   standard: { id: "standard", name: "Standard", allowance: 20, amountCents: 1_500 },
 } as const;
 
+export const BILLING_INTERVALS = [
+  { id: "monthly", label: "Monthly", checkoutLabel: "one month", months: 1, savingsPercent: 0, amounts: { basic: 1_000, standard: 1_500 } },
+  { id: "quarterly", label: "Quarterly", checkoutLabel: "three months", months: 3, savingsPercent: 7, amounts: { basic: 2_800, standard: 4_200 } },
+  { id: "six_month", label: "6 months", checkoutLabel: "six months", months: 6, savingsPercent: 10, amounts: { basic: 5_400, standard: 8_100 } },
+  { id: "annual", label: "Annually", checkoutLabel: "one year", months: 12, savingsPercent: 20, amounts: { basic: 9_600, standard: 14_400 } },
+] as const;
+
 export const EXTRA_CREDIT_PRICE_CENTS = 150;
 
 export function isPlanId(value: unknown): value is PlanId {
   return value === "free" || value === "basic" || value === "standard";
+}
+
+export function isBillingInterval(value: unknown): value is BillingInterval {
+  return value === "monthly" || value === "quarterly" || value === "six_month" || value === "annual";
+}
+
+function billingIntervalDetails(interval: BillingInterval) {
+  return BILLING_INTERVALS.find((option) => option.id === interval) ?? BILLING_INTERVALS[0];
+}
+
+function subscriptionProduct(productId: string) {
+  for (const plan of ["basic", "standard"] as const) {
+    for (const interval of BILLING_INTERVALS) {
+      if (productId === `${plan}_${interval.id}`) {
+        return { plan, interval, amountCents: interval.amounts[plan] };
+      }
+    }
+  }
+  return null;
 }
 
 export function hasPaidPlanFeatures(plan: PlanId) {
@@ -37,6 +64,7 @@ export type AccountRecord = Identity & {
   termsAcceptedAt: string | null;
   privacyAcceptedAt: string | null;
   subscriptionStatus: "active" | "canceling" | "free";
+  billingInterval: BillingInterval;
   billingPeriodStart: string | null;
   billingPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
@@ -107,6 +135,7 @@ export async function ensureSchema() {
         terms_accepted_at TEXT,
         privacy_accepted_at TEXT,
         subscription_status TEXT NOT NULL DEFAULT 'free',
+        billing_interval TEXT NOT NULL DEFAULT 'monthly',
         billing_period_start TEXT,
         billing_period_end TEXT,
         cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
@@ -168,6 +197,7 @@ export async function ensureSchema() {
     const missingUserColumns = [
       ["account_status", "ALTER TABLE users ADD COLUMN account_status TEXT NOT NULL DEFAULT 'active'"],
       ["subscription_status", "ALTER TABLE users ADD COLUMN subscription_status TEXT NOT NULL DEFAULT 'free'"],
+      ["billing_interval", "ALTER TABLE users ADD COLUMN billing_interval TEXT NOT NULL DEFAULT 'monthly'"],
       ["billing_period_start", "ALTER TABLE users ADD COLUMN billing_period_start TEXT"],
       ["billing_period_end", "ALTER TABLE users ADD COLUMN billing_period_end TEXT"],
       ["cancel_at_period_end", "ALTER TABLE users ADD COLUMN cancel_at_period_end INTEGER NOT NULL DEFAULT 0"],
@@ -221,29 +251,30 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
   const db = getD1();
   const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance,
       bonus_credits, is_admin, account_status, terms_accepted_at, privacy_accepted_at,
-      subscription_status, billing_period_start, billing_period_end, cancel_at_period_end
+      subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end
       FROM users WHERE id = ?`).bind(userId).first<Record<string, unknown>>();
   if (!row) throw new Error("AppliFlow account could not be created.");
   const rawPlan = isPlanId(row.plan) ? row.plan : "free";
+  const billingInterval = isBillingInterval(row.billing_interval) ? row.billing_interval : "monthly";
   const periodEnd = row.billing_period_end ? databaseTimestamp(row.billing_period_end) : null;
   if (rawPlan !== "free" && periodEnd && Date.parse(periodEnd) <= Date.now()) {
     if (Number(row.cancel_at_period_end) === 1) {
       await db.prepare(`UPDATE users SET plan = 'free', monthly_allowance = ?, subscription_status = 'free',
-          billing_period_start = NULL, billing_period_end = NULL, cancel_at_period_end = 0,
+          billing_interval = 'monthly', billing_period_start = NULL, billing_period_end = NULL, cancel_at_period_end = 0,
           payment_subscription_id = NULL, plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`).bind(PLAN_CATALOG.free.allowance, userId).run();
       return getAccount(userId);
     }
     if (paymentMode() === "demo") {
       let nextStart = new Date(periodEnd);
-      let nextEnd = new Date(nextStart);
-      nextEnd.setUTCMonth(nextEnd.getUTCMonth() + 1);
+      let nextEnd = addUtcMonths(nextStart, billingIntervalDetails(billingInterval).months);
       while (nextEnd.getTime() <= Date.now()) {
         nextStart = nextEnd;
-        nextEnd = new Date(nextStart);
-        nextEnd.setUTCMonth(nextEnd.getUTCMonth() + 1);
+        nextEnd = addUtcMonths(nextStart, billingIntervalDetails(billingInterval).months);
       }
       const renewalReference = `demo-renewal:${userId}:${nextStart.toISOString()}`;
+      const renewal = subscriptionProduct(`${rawPlan}_${billingInterval}`);
+      if (!renewal) throw new Error("The subscription renewal schedule is invalid.");
       await db.batch([
         db.prepare(`UPDATE users SET billing_period_start = ?, billing_period_end = ?,
           subscription_status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -251,7 +282,7 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
         db.prepare(`INSERT OR IGNORE INTO billing_transactions
           (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
           VALUES (?, 'demo', ?, 'subscription_renewal', ?, ?, 0, ?, 'CAD', 'succeeded')`)
-          .bind(userId, renewalReference, `${rawPlan}_monthly`, rawPlan, PLAN_CATALOG[rawPlan].amountCents),
+          .bind(userId, renewalReference, `${rawPlan}_${billingInterval}`, rawPlan, renewal.amountCents),
       ]);
       return getAccount(userId);
     }
@@ -268,6 +299,7 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
     termsAcceptedAt: row.terms_accepted_at ? String(row.terms_accepted_at) : null,
     privacyAcceptedAt: row.privacy_accepted_at ? String(row.privacy_accepted_at) : null,
     subscriptionStatus: rawPlan === "free" ? "free" : Number(row.cancel_at_period_end) === 1 ? "canceling" : "active",
+    billingInterval,
     billingPeriodStart: row.billing_period_start ? databaseTimestamp(row.billing_period_start) : null,
     billingPeriodEnd: periodEnd,
     cancelAtPeriodEnd: Number(row.cancel_at_period_end) === 1,
@@ -307,9 +339,27 @@ function monthWindow(now = new Date()) {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+function addUtcMonths(value: Date, months: number) {
+  const result = new Date(value);
+  const day = result.getUTCDate();
+  result.setUTCDate(1);
+  result.setUTCMonth(result.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0)).getUTCDate();
+  result.setUTCDate(Math.min(day, lastDay));
+  return result;
+}
+
 function usageWindow(account: AccountRecord) {
   if (account.plan !== "free" && account.billingPeriodStart && account.billingPeriodEnd) {
-    return { start: account.billingPeriodStart, end: account.billingPeriodEnd };
+    const subscriptionEnd = new Date(account.billingPeriodEnd);
+    let start = new Date(account.billingPeriodStart);
+    let end = addUtcMonths(start, 1);
+    while (end.getTime() <= Date.now() && end.getTime() < subscriptionEnd.getTime()) {
+      start = end;
+      end = addUtcMonths(start, 1);
+    }
+    if (end.getTime() > subscriptionEnd.getTime()) end = subscriptionEnd;
+    return { start: start.toISOString(), end: end.toISOString() };
   }
   return monthWindow();
 }
@@ -512,6 +562,7 @@ export async function getBillingSummary(identity: Identity) {
     usage,
     transactions,
     plans: Object.values(PLAN_CATALOG),
+    billingIntervals: BILLING_INTERVALS,
     extraCreditPriceCents: EXTRA_CREDIT_PRICE_CENTS,
     sandboxCreditLimit: 20,
   };
@@ -523,10 +574,9 @@ function safeReference(gateway: string, identity: Identity, requestId: string) {
   return `${gateway}:${identity.userId}:${cleaned}`;
 }
 
-function nextBillingPeriod() {
+function nextBillingPeriod(interval: BillingInterval) {
   const start = new Date();
-  const end = new Date(start);
-  end.setUTCMonth(end.getUTCMonth() + 1);
+  const end = addUtcMonths(start, billingIntervalDetails(interval).months);
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
@@ -542,20 +592,21 @@ export async function completeDemoCheckout(identity: Identity, productId: string
   if (existing) return getBillingSummary(identity);
 
   const db = getD1();
-  if (productId === "basic_monthly" || productId === "standard_monthly") {
-    const plan: PlanId = productId === "basic_monthly" ? "basic" : "standard";
+  const subscription = subscriptionProduct(productId);
+  if (subscription) {
+    const { plan, interval, amountCents } = subscription;
     const product = PLAN_CATALOG[plan];
     const inserted = await db.prepare(`INSERT OR IGNORE INTO billing_transactions
         (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
         VALUES (?, 'demo', ?, 'subscription_purchase', ?, ?, 0, ?, 'CAD', 'succeeded')`)
-      .bind(identity.userId, reference, productId, plan, product.amountCents).run();
+      .bind(identity.userId, reference, productId, plan, amountCents).run();
     if (resultChanges(inserted) > 0) {
-      const period = nextBillingPeriod();
+      const period = nextBillingPeriod(interval.id);
       await db.prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = 'active',
-          billing_period_start = ?, billing_period_end = ?, cancel_at_period_end = 0,
+          billing_interval = ?, billing_period_start = ?, billing_period_end = ?, cancel_at_period_end = 0,
           payment_customer_id = COALESCE(payment_customer_id, ?), payment_subscription_id = ?,
           plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-        .bind(plan, product.allowance, period.start, period.end, `demo_customer_${identity.userId}`, `demo_subscription_${identity.userId}`, identity.userId).run();
+        .bind(plan, product.allowance, interval.id, period.start, period.end, `demo_customer_${identity.userId}`, `demo_subscription_${identity.userId}`, identity.userId).run();
     }
     return getBillingSummary(identity);
   }
@@ -588,7 +639,7 @@ export async function scheduleSubscriptionCancellation(identity: Identity, reque
   const inserted = await db.prepare(`INSERT OR IGNORE INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
       VALUES (?, ?, ?, 'subscription_cancel', ?, ?, 0, 0, 'CAD', 'succeeded')`)
-    .bind(identity.userId, paymentMode(), reference, `${account.plan}_monthly`, account.plan).run();
+    .bind(identity.userId, paymentMode(), reference, `${account.plan}_${account.billingInterval}`, account.plan).run();
   if (resultChanges(inserted) > 0) {
     await db.prepare(`UPDATE users SET cancel_at_period_end = 1, subscription_status = 'canceling',
       updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(identity.userId).run();
@@ -604,7 +655,7 @@ export async function resumeSubscription(identity: Identity, requestId: string) 
   const inserted = await db.prepare(`INSERT OR IGNORE INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
       VALUES (?, ?, ?, 'subscription_resume', ?, ?, 0, 0, 'CAD', 'succeeded')`)
-    .bind(identity.userId, paymentMode(), reference, `${account.plan}_monthly`, account.plan).run();
+    .bind(identity.userId, paymentMode(), reference, `${account.plan}_${account.billingInterval}`, account.plan).run();
   if (resultChanges(inserted) > 0) {
     await db.prepare(`UPDATE users SET cancel_at_period_end = 0, subscription_status = 'active',
       updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(identity.userId).run();
@@ -627,7 +678,7 @@ export async function adminSummary(identity: Identity) {
         WHERE status = 'succeeded' AND amount_cents > 0) AS sandbox_revenue_cents`)
     .first<{ users: number; suspended: number; paid_subscribers: number; generations: number; tokens: number; sandbox_revenue_cents: number }>();
   const rows = await db.prepare(`SELECT u.id, u.email, u.display_name, u.plan, u.monthly_allowance,
-      u.bonus_credits, u.account_status, u.subscription_status, u.billing_period_end,
+      u.bonus_credits, u.account_status, u.subscription_status, u.billing_interval, u.billing_period_end,
       u.cancel_at_period_end, u.created_at, u.updated_at, COUNT(a.id) AS generations,
       (SELECT COUNT(*) FROM login_events l WHERE l.user_id = u.id) AS login_count,
       (SELECT MAX(l.created_at) FROM login_events l WHERE l.user_id = u.id) AS last_login_at
@@ -650,7 +701,9 @@ export async function adminSummary(identity: Identity) {
       id: String(row.id), email: String(row.email), displayName: String(row.display_name), plan: String(row.plan),
       monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),
       accountStatus: row.account_status === "suspended" ? "suspended" : "active",
-      subscriptionStatus: String(row.subscription_status), billingPeriodEnd: row.billing_period_end ? databaseTimestamp(row.billing_period_end) : null,
+      subscriptionStatus: String(row.subscription_status),
+      billingInterval: isBillingInterval(row.billing_interval) ? row.billing_interval : "monthly",
+      billingPeriodEnd: row.billing_period_end ? databaseTimestamp(row.billing_period_end) : null,
       cancelAtPeriodEnd: Number(row.cancel_at_period_end) === 1,
       generations: Number(row.generations), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
       loginCount: Number(row.login_count), lastLoginAt: row.last_login_at ? databaseTimestamp(row.last_login_at) : null,
@@ -672,7 +725,7 @@ export async function adminUserDetail(identity: Identity, targetUserId: string) 
   if (!account.isAdmin) throw new Error("Administrator access is required.");
   const db = getD1();
   const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance, bonus_credits,
-      account_status, subscription_status, billing_period_start, billing_period_end, cancel_at_period_end,
+      account_status, subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end,
       created_at, updated_at,
       (SELECT COUNT(*) FROM ai_usage a WHERE a.user_id = users.id
         AND a.status = 'succeeded' AND a.kind != 'resume_extract') AS generations,
@@ -691,7 +744,9 @@ export async function adminUserDetail(identity: Identity, targetUserId: string) 
       id: String(row.id), email: String(row.email), displayName: String(row.display_name), plan: String(row.plan),
       monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),
       accountStatus: row.account_status === "suspended" ? "suspended" : "active",
-      subscriptionStatus: String(row.subscription_status), billingPeriodStart: row.billing_period_start ? databaseTimestamp(row.billing_period_start) : null,
+      subscriptionStatus: String(row.subscription_status),
+      billingInterval: isBillingInterval(row.billing_interval) ? row.billing_interval : "monthly",
+      billingPeriodStart: row.billing_period_start ? databaseTimestamp(row.billing_period_start) : null,
       billingPeriodEnd: row.billing_period_end ? databaseTimestamp(row.billing_period_end) : null,
       cancelAtPeriodEnd: Number(row.cancel_at_period_end) === 1,
       generations: Number(row.generations), createdAt: databaseTimestamp(row.created_at), updatedAt: databaseTimestamp(row.updated_at),

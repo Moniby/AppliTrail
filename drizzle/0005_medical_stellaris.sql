@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `billing_interval` text DEFAULT 'monthly' NOT NULL;

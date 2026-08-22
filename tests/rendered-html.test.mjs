@@ -24,6 +24,9 @@ test("server-renders the public AppliFlow launch page", async () => {
   assert.match(html, /Private by design/i);
   assert.match(html, /Professional CV formats in Word and PDF/i);
   assert.match(html, /No formatted CV downloads, reminders or Excel export/i);
+  assert.match(html, /Quarterly/i);
+  assert.match(html, /\$96/);
+  assert.match(html, /Included AI generations refresh monthly/i);
 });
 
 test("uses direct navigation for the protected dashboard handoff", async () => {
@@ -34,7 +37,7 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, dashboard, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, dashboard, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
@@ -51,6 +54,7 @@ test("declares portable account, database and file-storage boundaries", async ()
     readFile(new URL("../drizzle/0002_windy_rawhide_kid.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0003_colossal_prowler.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0004_famous_sumo.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0005_medical_stellaris.sql", import.meta.url), "utf8"),
   ]);
   const hosting = JSON.parse(hostingText);
   assert.equal(hosting.d1, "DB");
@@ -61,6 +65,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(schema, /sqliteTable\(\s*"login_events"/);
   assert.match(schema, /sqliteTable\(\s*"billing_transactions"/);
   assert.match(schema, /accountStatus: text\("account_status"\)/);
+  assert.match(schema, /billingInterval: text\("billing_interval"\)/);
   assert.match(stateRoute, /requestUser\(request\)/);
   assert.match(stateRoute, /url\.protocol === "https:" \|\| url\.protocol === "http:"/);
   assert.match(stateRoute, /salary: 200/);
@@ -96,6 +101,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(loginAuditMigration, /CREATE INDEX `idx_login_events_user_created`/);
   assert.match(billingMigration, /CREATE TABLE `billing_transactions`/);
   assert.match(billingMigration, /`monthly_allowance` integer DEFAULT 2 NOT NULL/);
+  assert.match(billingIntervalMigration, /ADD `billing_interval` text DEFAULT 'monthly' NOT NULL/);
   assert.match(billingRoute, /completeDemoCheckout/);
   assert.match(billingRoute, /scheduleSubscriptionCancellation/);
   assert.match(dashboard, /Import my data/);
@@ -151,6 +157,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /SANDBOX · NO CARD CHARGED/);
   assert.match(dashboard, /PLANS & BILLING/);
   assert.match(dashboard, /Buy credits/);
+  assert.match(dashboard, /BILLING FREQUENCY/);
+  assert.match(dashboard, /Change billing frequency/);
+  assert.match(dashboard, /AI generations will refresh every month/);
   assert.match(dashboard, /PAYMENT AUDIT/);
   assert.match(dashboard, /View details/);
   assert.match(dashboard, /Login information/);
@@ -172,6 +181,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /basic: \{ id: "basic", name: "Basic", allowance: 10/);
   assert.match(accountStore, /standard: \{ id: "standard", name: "Standard", allowance: 20/);
   assert.match(accountStore, /EXTRA_CREDIT_PRICE_CENTS = 150/);
+  assert.match(accountStore, /quarterly.*amounts: \{ basic: 2_800, standard: 4_200 \}/);
+  assert.match(accountStore, /six_month.*amounts: \{ basic: 5_400, standard: 8_100 \}/);
+  assert.match(accountStore, /annual.*amounts: \{ basic: 9_600, standard: 14_400 \}/);
+  assert.match(accountStore, /addUtcMonths\(start, 1\)/);
   assert.match(accountStore, /hasPaidPlanFeatures/);
   assert.match(accountStore, /creditAudit: auditRows\.results/);
   assert.match(accountStore, /WHERE a\.status = 'succeeded'/);
