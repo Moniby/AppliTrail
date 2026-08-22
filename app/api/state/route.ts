@@ -65,6 +65,23 @@ function cleanState(value: unknown) {
     for (const [key, maximum] of Object.entries({ company: 300, role: 300, sector: 300, location: 500, description: 40_000, salary: 200, rejectionComment: 10_000, interviewNotes: 20_000, date: 30, phoneDate: 30, phoneTime: 30, phoneTimeZone: 100, interviewDate: 30, interviewTime: 30, interviewTimeZone: 100 })) {
       safe[key] = text(app[key], maximum);
     }
+    safe.customTasks = (Array.isArray(app.customTasks) ? app.customTasks : []).slice(0, 200).map((item, index) => {
+      const task = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(text(task.date, 30)) ? text(task.date, 30) : "";
+      const time = /^\d{2}:\d{2}$/.test(text(task.time, 30)) ? text(task.time, 30) : "";
+      const createdAt = text(task.createdAt, 50), completedAt = text(task.completedAt, 50);
+      return {
+        id: text(task.id, 120).replace(/[^a-z0-9-]/gi, "-") || `task-${index + 1}`,
+        title: text(task.title, 300) || "Application task",
+        date,
+        ...(time ? { time } : {}),
+        timeZone: text(task.timeZone, 100) || "Local time",
+        ...(text(task.notes, 5000) ? { notes: text(task.notes, 5000) } : {}),
+        completed: Boolean(task.completed),
+        createdAt: createdAt && !Number.isNaN(Date.parse(createdAt)) ? createdAt : new Date().toISOString(),
+        ...(completedAt && !Number.isNaN(Date.parse(completedAt)) ? { completedAt } : {}),
+      };
+    }).filter((task) => task.date);
     safe.url = safeJobUrl(app.url);
     safe.id = Number.isFinite(Number(app.id)) ? Number(app.id) : Date.now();
     safe.stage = STAGES.has(stage) ? stage : "Saved";
@@ -89,7 +106,7 @@ function cleanState(value: unknown) {
     reminderDaysBefore: Math.max(1, Math.min(30, Math.round(Number(rawPreferences.reminderDaysBefore) || 3))),
     followUpDays: Math.max(3, Math.min(60, Math.round(Number(rawPreferences.followUpDays) || 7))),
   };
-  return { schemaVersion: 5, apps, masterCvs, activeMasterCvId, preferences };
+  return { schemaVersion: 6, apps, masterCvs, activeMasterCvId, preferences };
 }
 
 export async function GET(request: Request) {

@@ -62,7 +62,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /rejectionComment: 10_000/);
   assert.match(stateRoute, /interviewNotes: 20_000/);
   assert.match(stateRoute, /safe\.stageHistory = stageHistory\.length/);
-  assert.match(stateRoute, /schemaVersion: 5/);
+  assert.match(stateRoute, /schemaVersion: 6/);
+  assert.match(stateRoute, /safe\.customTasks/);
   assert.match(stateRoute, /customSections/);
   assert.match(stateRoute, /sectionOrder/);
   assert.match(stateRoute, /getUserCreditAudit\(identity\.userId\)/);
@@ -86,6 +87,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Import my data/);
   assert.match(dashboard, /Delete account data/);
   assert.match(dashboard, /Add to calendar/);
+  assert.match(dashboard, /Add reminder task/);
+  assert.match(dashboard, /Application reminders/);
+  assert.match(dashboard, /Task marked complete/);
   assert.match(dashboard, /Suspend/);
   assert.match(dashboard, /Monthly limit/);
   assert.match(dashboard, /action:"allowance"/);
