@@ -97,6 +97,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Delete account data/);
   assert.match(dashboard, /Add to calendar/);
   assert.match(dashboard, /Add reminder task/);
+  assert.match(dashboard, /className="header-signout"/);
+  assert.match(dashboard, /aria-label=\{`Sign out \$\{signedInName\}`\}/);
   assert.match(dashboard, /Application reminders/);
   assert.match(dashboard, /Task marked complete/);
   assert.match(dashboard, /Select position type/);
@@ -148,6 +150,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /const loggedInIdentity=account\?\?identity/);
   assert.match(dashboard, /view==="overview"\?`Hi, \$\{greetingName\}`/);
   assert.doesNotMatch(dashboard, /profile\.name\|\|account\?\.displayName/);
+  assert.match(dashboard, /className="reminder-sidebar"/);
   assert.match(preparationDocx, /return Packer\.toBlob\(document\)/);
   assert.match(preparationDocx, /style: block\.level === 1 \? "PrepHeading1" : "PrepHeading2"/);
   assert.match(preparationDocx, /bold: true/);
