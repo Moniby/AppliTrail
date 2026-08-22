@@ -85,6 +85,7 @@ const artifactConfig: Record<
 - Explain a truthful role-and-company motivation using only the supplied vacancy data.
 - Include clearly labeled prompts for the applicant to personalize compensation, location, availability, notice period, and work authorization.
 - Include exactly five thoughtful questions to ask the recruiter.
+- Use concise Markdown section headers on separate lines in the form "## Header" and use "### Header" for sub-sections.
 - Make the brief easy to scan during a call.`,
   },
   interview: {
@@ -97,6 +98,7 @@ const artifactConfig: Record<
 - Create STAR story outlines using verified experience only. When a result is not supplied, label it as a prompt for the applicant instead of inventing it.
 - Include technical refresh topics and realistic scenario drills tailored to the job description.
 - Include five thoughtful questions for the interviewer, a concise closing statement, and a follow-up note.
+- Use concise Markdown section headers on separate lines in the form "## Header" and use "### Header" for sub-sections.
 - Keep unsupported requirements visible as preparation gaps rather than pretending the candidate has them.`,
   },
 };

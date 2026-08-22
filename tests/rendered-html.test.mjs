@@ -32,15 +32,17 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, accountRoute, adminRoute, dashboard, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, dashboard, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/resumes/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/extract-resume/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/generate-application-material/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/account/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/preparation-docx.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/appliflow-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0001_free_bucky.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0002_windy_rawhide_kid.sql", import.meta.url), "utf8"),
@@ -69,6 +71,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(extractResumeRoute, /type: "input_file"/);
   assert.match(extractResumeRoute, /Never invent, infer, improve or complete facts/);
   assert.match(extractResumeRoute, /suggested_master_cv_name/);
+  assert.match(generateRoute, /Markdown section headers/);
   assert.match(accountRoute, /action === "record-login"/);
   assert.match(accountRoute, /recordLoginEvent/);
   assert.match(adminRoute, /setAccountStatus/);
@@ -102,9 +105,13 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Master CV Name/);
   assert.match(dashboard, /Technical tools & technologies/);
   assert.match(dashboard, /Custom section/);
-  assert.match(dashboard, /CV extraction does not use an AI credit/);
+  assert.match(dashboard, /No user credit used/);
   assert.match(dashboard, /No AI credit will be used/);
   assert.match(dashboard, /Upload &amp; extract/);
+  assert.match(dashboard, /Download DOCX/);
+  assert.match(dashboard, /await import\("\.\/preparation-docx"\)/);
+  assert.match(dashboard, /PreparationPreview/);
+  assert.match(dashboard, /FORMATTED PREVIEW/);
   assert.match(dashboard, /Credit usage audit/i);
   assert.match(dashboard, /AI CREDIT CONFIRMATION/);
   assert.match(dashboard, /Use 1 credit & generate/);
@@ -119,6 +126,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /const loggedInIdentity=account\?\?identity/);
   assert.match(dashboard, /view==="overview"\?`Hi, \$\{greetingName\}`/);
   assert.doesNotMatch(dashboard, /profile\.name\|\|account\?\.displayName/);
+  assert.match(preparationDocx, /return Packer\.toBlob\(document\)/);
+  assert.match(preparationDocx, /style: block\.level === 1 \? "PrepHeading1" : "PrepHeading2"/);
+  assert.match(preparationDocx, /bold: true/);
+  assert.match(preparationDocx, /format: LevelFormat\.DECIMAL/);
   assert.match(accountStore, /APPLIFLOW_ADMIN_EMAIL/);
   assert.match(accountStore, /identity\.email\.trim\(\)\.toLowerCase\(\)/);
   assert.match(accountStore, /identity\.displayName, 5, isAdmin/);
