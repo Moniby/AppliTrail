@@ -32,16 +32,18 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, adminRoute, dashboard, accountStore, phaseThreeMigration, allowanceMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, accountRoute, adminRoute, dashboard, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/resumes/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/account/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../db/appliflow-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0001_free_bucky.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0002_windy_rawhide_kid.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0003_colossal_prowler.sql", import.meta.url), "utf8"),
   ]);
   const hosting = JSON.parse(hostingText);
   assert.equal(hosting.d1, "DB");
@@ -49,6 +51,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(schema, /sqliteTable\("users"/);
   assert.match(schema, /sqliteTable\("user_states"/);
   assert.match(schema, /sqliteTable\(\s*"ai_usage"/);
+  assert.match(schema, /sqliteTable\(\s*"login_events"/);
   assert.match(schema, /accountStatus: text\("account_status"\)/);
   assert.match(stateRoute, /requestUser\(request\)/);
   assert.match(stateRoute, /url\.protocol === "https:" \|\| url\.protocol === "http:"/);
@@ -59,11 +62,17 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /schemaVersion: 4/);
   assert.match(stateRoute, /getUserCreditAudit\(identity\.userId\)/);
   assert.match(resumeRoute, /resumeKey\(identity\.userId/);
+  assert.match(accountRoute, /action === "record-login"/);
+  assert.match(accountRoute, /recordLoginEvent/);
   assert.match(adminRoute, /setAccountStatus/);
   assert.match(adminRoute, /setMonthlyAllowance/);
+  assert.match(adminRoute, /adminUserDetail/);
+  assert.match(adminRoute, /searchParams\.get\("userId"\)/);
   assert.match(phaseThreeMigration, /ALTER TABLE `users` ADD `account_status`/);
   assert.match(allowanceMigration, /`monthly_allowance` integer DEFAULT 5 NOT NULL/);
   assert.match(allowanceMigration, /SET `monthly_allowance` = 5/);
+  assert.match(loginAuditMigration, /CREATE TABLE `login_events`/);
+  assert.match(loginAuditMigration, /CREATE INDEX `idx_login_events_user_created`/);
   assert.match(dashboard, /Import my data/);
   assert.match(dashboard, /Delete account data/);
   assert.match(dashboard, /Add to calendar/);
@@ -82,6 +91,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /1 credit is charged only when generation succeeds/);
   assert.match(dashboard, /YOUR AI CREDIT HISTORY/);
   assert.match(dashboard, /Failed attempts do not use a credit/);
+  assert.match(dashboard, /View details/);
+  assert.match(dashboard, /Login information/);
+  assert.match(dashboard, /Passwords, IP addresses/);
+  assert.match(dashboard, /action:"record-login"/);
   assert.match(dashboard, /\^\[\\s\]\*\[=\+\\-@\]/);
   assert.match(dashboard, /const loggedInIdentity=account\?\?identity/);
   assert.match(dashboard, /view==="overview"\?`Hi, \$\{greetingName\}`/);
@@ -93,4 +106,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /WHERE a\.status = 'succeeded'/);
   assert.match(accountStore, /getUserCreditAudit\(userId: string\)/);
   assert.match(accountStore, /WHERE user_id = \? AND status = 'succeeded'/);
+  assert.match(accountStore, /CREATE TABLE IF NOT EXISTS login_events/);
+  assert.match(accountStore, /adminUserDetail/);
+  assert.match(accountStore, /datetime\('now', '-5 minutes'\)/);
 });

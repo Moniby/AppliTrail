@@ -1,11 +1,14 @@
-import { adminSummary, setAccountStatus, setMonthlyAllowance } from "../../../db/appliflow-store";
+import { adminSummary, adminUserDetail, setAccountStatus, setMonthlyAllowance } from "../../../db/appliflow-store";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 export async function GET(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
-  try { return Response.json(await adminSummary(identity)); }
-  catch { return Response.json({ error: "Administrator access is required." }, { status: 403 }); }
+  try {
+    const userId = new URL(request.url).searchParams.get("userId");
+    return Response.json(userId ? await adminUserDetail(identity, userId) : await adminSummary(identity));
+  }
+  catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Administrator access is required." }, { status: 403 }); }
 }
 
 export async function POST(request: Request) {

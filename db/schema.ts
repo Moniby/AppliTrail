@@ -41,3 +41,14 @@ export const aiUsage = sqliteTable(
     index("idx_ai_usage_status_created").on(table.status, table.createdAt),
   ],
 );
+
+export const loginEvents = sqliteTable(
+  "login_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    userAgent: text("user_agent").notNull().default(""),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [index("idx_login_events_user_created").on(table.userId, table.createdAt)],
+);

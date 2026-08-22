@@ -82,8 +82,16 @@ export async function ensureSchema() {
         finished_at TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )`),
+      db.prepare(`CREATE TABLE IF NOT EXISTS login_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        user_id TEXT NOT NULL,
+        user_agent TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage(user_id, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_status_created ON ai_usage(status, created_at)"),
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_login_events_user_created ON login_events(user_id, created_at)"),
     ]);
     const userColumns = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
     if (!userColumns.results.some((column) => column.name === "account_status")) {
@@ -210,6 +218,19 @@ export async function getUserCreditAudit(userId: string): Promise<CreditUsageRec
   }));
 }
 
+export async function recordLoginEvent(userId: string, userAgent: string) {
+  await ensureSchema();
+  const safeUserAgent = userAgent.slice(0, 500) || "Unknown browser";
+  const recent = await getD1().prepare(`SELECT id FROM login_events
+      WHERE user_id = ? AND user_agent = ? AND created_at >= datetime('now', '-5 minutes')
+      ORDER BY created_at DESC LIMIT 1`)
+    .bind(userId, safeUserAgent).first<{ id: number }>();
+  if (recent) return false;
+  await getD1().prepare("INSERT INTO login_events (user_id, user_agent) VALUES (?, ?)")
+    .bind(userId, safeUserAgent).run();
+  return true;
+}
+
 export async function beginGeneration(identity: Identity, kind: string, model: string) {
   const account = await ensureUser(identity);
   if (account.accountStatus === "suspended") {
@@ -253,6 +274,7 @@ export async function deleteAccountData(userId: string) {
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
   await getD1().batch([
+    getD1().prepare("DELETE FROM login_events WHERE user_id = ?").bind(userId),
     getD1().prepare("DELETE FROM ai_usage WHERE user_id = ?").bind(userId),
     getD1().prepare("DELETE FROM user_states WHERE user_id = ?").bind(userId),
     getD1().prepare("DELETE FROM users WHERE id = ?").bind(userId),
@@ -274,7 +296,9 @@ export async function adminSummary(identity: Identity) {
       (SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM ai_usage WHERE status = 'succeeded') AS tokens`)
     .first<{ users: number; suspended: number; generations: number; tokens: number }>();
   const rows = await db.prepare(`SELECT u.id, u.email, u.display_name, u.plan, u.monthly_allowance,
-      u.bonus_credits, u.account_status, u.created_at, u.updated_at, COUNT(a.id) AS generations
+      u.bonus_credits, u.account_status, u.created_at, u.updated_at, COUNT(a.id) AS generations,
+      (SELECT COUNT(*) FROM login_events l WHERE l.user_id = u.id) AS login_count,
+      (SELECT MAX(l.created_at) FROM login_events l WHERE l.user_id = u.id) AS last_login_at
       FROM users u LEFT JOIN ai_usage a ON a.user_id = u.id AND a.status = 'succeeded'
       GROUP BY u.id ORDER BY u.created_at DESC LIMIT 100`).all<Record<string, unknown>>();
   const auditRows = await db.prepare(`SELECT a.id, a.kind, a.model, a.input_tokens, a.output_tokens,
@@ -289,11 +313,43 @@ export async function adminSummary(identity: Identity) {
       monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),
       accountStatus: row.account_status === "suspended" ? "suspended" : "active",
       generations: Number(row.generations), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+      loginCount: Number(row.login_count), lastLoginAt: row.last_login_at ? databaseTimestamp(row.last_login_at) : null,
     })),
     creditAudit: auditRows.results.map((row) => ({
       id: Number(row.id), kind: String(row.kind), model: String(row.model),
       inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens), usedAt: databaseTimestamp(row.used_at),
       email: String(row.email), displayName: String(row.display_name),
+    })),
+  };
+}
+
+export async function adminUserDetail(identity: Identity, targetUserId: string) {
+  const account = await ensureUser(identity);
+  if (!account.isAdmin) throw new Error("Administrator access is required.");
+  const db = getD1();
+  const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance, bonus_credits,
+      account_status, created_at, updated_at,
+      (SELECT COUNT(*) FROM ai_usage a WHERE a.user_id = users.id AND a.status = 'succeeded') AS generations,
+      (SELECT MAX(l.created_at) FROM login_events l WHERE l.user_id = users.id) AS last_login_at
+      FROM users WHERE id = ?`).bind(targetUserId).first<Record<string, unknown>>();
+  if (!row) throw new Error("User not found.");
+  const [creditAudit, loginRows] = await Promise.all([
+    getUserCreditAudit(targetUserId),
+    db.prepare(`SELECT id, user_agent, created_at FROM login_events
+        WHERE user_id = ? ORDER BY created_at DESC LIMIT 100`)
+      .bind(targetUserId).all<Record<string, unknown>>(),
+  ]);
+  return {
+    user: {
+      id: String(row.id), email: String(row.email), displayName: String(row.display_name), plan: String(row.plan),
+      monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),
+      accountStatus: row.account_status === "suspended" ? "suspended" : "active",
+      generations: Number(row.generations), createdAt: databaseTimestamp(row.created_at), updatedAt: databaseTimestamp(row.updated_at),
+      lastLoginAt: row.last_login_at ? databaseTimestamp(row.last_login_at) : null,
+    },
+    creditAudit,
+    loginEvents: loginRows.results.map((login) => ({
+      id: Number(login.id), userAgent: String(login.user_agent), loggedInAt: databaseTimestamp(login.created_at),
     })),
   };
 }
