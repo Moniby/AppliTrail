@@ -241,7 +241,7 @@ export async function POST(request: Request) {
         ? "This AppliFlow account is suspended. Contact the administrator for help."
         : generation.reason === "rate"
         ? "Please wait a moment before starting another AI generation."
-        : "You have used this month's AI generation allowance. Extra credits can be added by the AppliFlow administrator.",
+        : "You have used your available AI credits. Open Account to upgrade your plan or add extra credits.",
       usage: "usage" in generation ? generation.usage : undefined,
     }, { status: generation.reason === "suspended" ? 403 : generation.reason === "rate" ? 429 : 402 });
   }

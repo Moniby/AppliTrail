@@ -32,7 +32,7 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, dashboard, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, dashboard, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
@@ -41,12 +41,14 @@ test("declares portable account, database and file-storage boundaries", async ()
     readFile(new URL("../app/api/generate-application-material/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/account/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/billing/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/preparation-docx.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/appliflow-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0001_free_bucky.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0002_windy_rawhide_kid.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0003_colossal_prowler.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0004_famous_sumo.sql", import.meta.url), "utf8"),
   ]);
   const hosting = JSON.parse(hostingText);
   assert.equal(hosting.d1, "DB");
@@ -55,6 +57,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(schema, /sqliteTable\("user_states"/);
   assert.match(schema, /sqliteTable\(\s*"ai_usage"/);
   assert.match(schema, /sqliteTable\(\s*"login_events"/);
+  assert.match(schema, /sqliteTable\(\s*"billing_transactions"/);
   assert.match(schema, /accountStatus: text\("account_status"\)/);
   assert.match(stateRoute, /requestUser\(request\)/);
   assert.match(stateRoute, /url\.protocol === "https:" \|\| url\.protocol === "http:"/);
@@ -86,6 +89,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(allowanceMigration, /SET `monthly_allowance` = 5/);
   assert.match(loginAuditMigration, /CREATE TABLE `login_events`/);
   assert.match(loginAuditMigration, /CREATE INDEX `idx_login_events_user_created`/);
+  assert.match(billingMigration, /CREATE TABLE `billing_transactions`/);
+  assert.match(billingMigration, /`monthly_allowance` integer DEFAULT 2 NOT NULL/);
+  assert.match(billingRoute, /completeDemoCheckout/);
+  assert.match(billingRoute, /scheduleSubscriptionCancellation/);
   assert.match(dashboard, /Import my data/);
   assert.match(dashboard, /Delete account data/);
   assert.match(dashboard, /Add to calendar/);
@@ -129,6 +136,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /1 credit is charged only when generation succeeds/);
   assert.match(dashboard, /YOUR AI CREDIT HISTORY/);
   assert.match(dashboard, /Failed attempts and CV extraction do not use a credit/);
+  assert.match(dashboard, /SANDBOX · NO CARD CHARGED/);
+  assert.match(dashboard, /PLANS & BILLING/);
+  assert.match(dashboard, /Buy credits/);
+  assert.match(dashboard, /PAYMENT AUDIT/);
   assert.match(dashboard, /View details/);
   assert.match(dashboard, /Login information/);
   assert.match(dashboard, /Passwords, IP addresses/);
@@ -143,7 +154,11 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(preparationDocx, /format: LevelFormat\.DECIMAL/);
   assert.match(accountStore, /APPLIFLOW_ADMIN_EMAIL/);
   assert.match(accountStore, /identity\.email\.trim\(\)\.toLowerCase\(\)/);
-  assert.match(accountStore, /identity\.displayName, 5, isAdmin/);
+  assert.match(accountStore, /PLAN_CATALOG\.free\.allowance, isAdmin/);
+  assert.match(accountStore, /free: \{ id: "free", name: "Free", allowance: 2/);
+  assert.match(accountStore, /basic: \{ id: "basic", name: "Basic", allowance: 10/);
+  assert.match(accountStore, /standard: \{ id: "standard", name: "Standard", allowance: 20/);
+  assert.match(accountStore, /EXTRA_CREDIT_PRICE_CENTS = 150/);
   assert.match(accountStore, /creditAudit: auditRows\.results/);
   assert.match(accountStore, /WHERE a\.status = 'succeeded'/);
   assert.match(accountStore, /getUserCreditAudit\(userId: string\)/);

@@ -5,13 +5,20 @@ export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull(),
   displayName: text("display_name").notNull(),
-  plan: text("plan").notNull().default("beta"),
-  monthlyAllowance: integer("monthly_allowance").notNull().default(5),
+  plan: text("plan").notNull().default("free"),
+  monthlyAllowance: integer("monthly_allowance").notNull().default(2),
   bonusCredits: integer("bonus_credits").notNull().default(0),
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
   accountStatus: text("account_status").notNull().default("active"),
   termsAcceptedAt: text("terms_accepted_at"),
   privacyAcceptedAt: text("privacy_accepted_at"),
+  subscriptionStatus: text("subscription_status").notNull().default("free"),
+  billingPeriodStart: text("billing_period_start"),
+  billingPeriodEnd: text("billing_period_end"),
+  cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" }).notNull().default(false),
+  paymentCustomerId: text("payment_customer_id"),
+  paymentSubscriptionId: text("payment_subscription_id"),
+  planUpdatedAt: text("plan_updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -33,12 +40,35 @@ export const aiUsage = sqliteTable(
     status: text("status").notNull().default("started"),
     inputTokens: integer("input_tokens").notNull().default(0),
     outputTokens: integer("output_tokens").notNull().default(0),
+    creditSource: text("credit_source").notNull().default("monthly"),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
     finishedAt: text("finished_at"),
   },
   (table) => [
     index("idx_ai_usage_user_created").on(table.userId, table.createdAt),
     index("idx_ai_usage_status_created").on(table.status, table.createdAt),
+  ],
+);
+
+export const billingTransactions = sqliteTable(
+  "billing_transactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    gateway: text("gateway").notNull().default("demo"),
+    gatewayReference: text("gateway_reference").notNull().unique(),
+    kind: text("kind").notNull(),
+    productId: text("product_id").notNull(),
+    plan: text("plan"),
+    credits: integer("credits").notNull().default(0),
+    amountCents: integer("amount_cents").notNull().default(0),
+    currency: text("currency").notNull().default("CAD"),
+    status: text("status").notNull().default("succeeded"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => [
+    index("idx_billing_transactions_user_created").on(table.userId, table.createdAt),
+    index("idx_billing_transactions_status_created").on(table.status, table.createdAt),
   ],
 );
 
