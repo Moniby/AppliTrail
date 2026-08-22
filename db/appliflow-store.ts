@@ -149,7 +149,7 @@ export async function saveUserState(userId: string, state: unknown) {
     throw new Error("This account has too much draft content to save. Remove older generated drafts and try again.");
   }
   await getD1().prepare(`INSERT INTO user_states (user_id, schema_version, state_json, updated_at)
-      VALUES (?, 2, ?, CURRENT_TIMESTAMP)
+      VALUES (?, 4, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(user_id) DO UPDATE SET
         schema_version = excluded.schema_version,
         state_json = excluded.state_json,
@@ -248,6 +248,11 @@ export async function adminSummary(identity: Identity) {
       u.bonus_credits, u.account_status, u.created_at, u.updated_at, COUNT(a.id) AS generations
       FROM users u LEFT JOIN ai_usage a ON a.user_id = u.id AND a.status = 'succeeded'
       GROUP BY u.id ORDER BY u.created_at DESC LIMIT 100`).all<Record<string, unknown>>();
+  const auditRows = await db.prepare(`SELECT a.id, a.kind, a.model, a.input_tokens, a.output_tokens,
+      COALESCE(a.finished_at, a.created_at) AS used_at, u.email, u.display_name
+      FROM ai_usage a JOIN users u ON u.id = a.user_id
+      WHERE a.status = 'succeeded'
+      ORDER BY COALESCE(a.finished_at, a.created_at) DESC LIMIT 200`).all<Record<string, unknown>>();
   return {
     totals: { users: Number(totals?.users ?? 0), suspended: Number(totals?.suspended ?? 0), generations: Number(totals?.generations ?? 0), tokens: Number(totals?.tokens ?? 0) },
     users: rows.results.map((row) => ({
@@ -255,6 +260,11 @@ export async function adminSummary(identity: Identity) {
       monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),
       accountStatus: row.account_status === "suspended" ? "suspended" : "active",
       generations: Number(row.generations), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+    })),
+    creditAudit: auditRows.results.map((row) => ({
+      id: Number(row.id), kind: String(row.kind), model: String(row.model),
+      inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens), usedAt: String(row.used_at),
+      email: String(row.email), displayName: String(row.display_name),
     })),
   };
 }

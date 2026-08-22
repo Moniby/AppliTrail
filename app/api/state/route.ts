@@ -52,12 +52,23 @@ function cleanState(value: unknown) {
     const app = item && typeof item === "object" ? item as Record<string, unknown> : {};
     const stage = text(app.stage, 80);
     const safe = { ...app } as Record<string, unknown>;
-    for (const [key, maximum] of Object.entries({ company: 300, role: 300, sector: 300, location: 500, description: 40_000, date: 30, phoneDate: 30, phoneTime: 30, phoneTimeZone: 100, interviewDate: 30, interviewTime: 30, interviewTimeZone: 100 })) {
+    for (const [key, maximum] of Object.entries({ company: 300, role: 300, sector: 300, location: 500, description: 40_000, salary: 200, rejectionComment: 10_000, interviewNotes: 20_000, date: 30, phoneDate: 30, phoneTime: 30, phoneTimeZone: 100, interviewDate: 30, interviewTime: 30, interviewTimeZone: 100 })) {
       safe[key] = text(app[key], maximum);
     }
     safe.url = safeJobUrl(app.url);
     safe.id = Number.isFinite(Number(app.id)) ? Number(app.id) : Date.now();
     safe.stage = STAGES.has(stage) ? stage : "Saved";
+    const stageHistory = (Array.isArray(app.stageHistory) ? app.stageHistory : []).slice(0, 100).map((item) => {
+      const event = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      const eventStage = text(event.stage, 80), enteredAt = text(event.enteredAt, 50), leftAt = text(event.leftAt, 50);
+      if (!STAGES.has(eventStage) || Number.isNaN(Date.parse(enteredAt))) return null;
+      return { stage: eventStage, enteredAt, ...(leftAt && !Number.isNaN(Date.parse(leftAt)) ? { leftAt } : {}) };
+    }).filter(Boolean);
+    const stageDate = safe.stage === "Interview" && /^\d{4}-\d{2}-\d{2}$/.test(String(safe.interviewDate)) ? String(safe.interviewDate)
+      : safe.stage === "Phone screen" && /^\d{4}-\d{2}-\d{2}$/.test(String(safe.phoneDate)) ? String(safe.phoneDate)
+      : String(safe.date);
+    const stageTime = safe.stage === "Interview" ? String(safe.interviewTime || "12:00") : safe.stage === "Phone screen" ? String(safe.phoneTime || "12:00") : "12:00";
+    safe.stageHistory = stageHistory.length ? stageHistory : [{ stage: safe.stage, enteredAt: /^\d{4}-\d{2}-\d{2}$/.test(stageDate) && /^\d{2}:\d{2}$/.test(stageTime) ? `${stageDate}T${stageTime}:00.000Z` : new Date().toISOString() }];
     safe.masterCvId = masterIds.has(text(app.masterCvId, 100)) ? text(app.masterCvId, 100) : fallbackMasterId;
     delete safe.eventDate; delete safe.eventTime;
     return safe;
@@ -68,7 +79,7 @@ function cleanState(value: unknown) {
     reminderDaysBefore: Math.max(1, Math.min(30, Math.round(Number(rawPreferences.reminderDaysBefore) || 3))),
     followUpDays: Math.max(3, Math.min(60, Math.round(Number(rawPreferences.followUpDays) || 7))),
   };
-  return { schemaVersion: 3, apps, masterCvs, activeMasterCvId, preferences };
+  return { schemaVersion: 4, apps, masterCvs, activeMasterCvId, preferences };
 }
 
 export async function GET(request: Request) {
