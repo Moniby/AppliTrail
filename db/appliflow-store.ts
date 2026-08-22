@@ -20,6 +20,10 @@ export function isPlanId(value: unknown): value is PlanId {
   return value === "free" || value === "basic" || value === "standard";
 }
 
+export function hasPaidPlanFeatures(plan: PlanId) {
+  return plan === "basic" || plan === "standard";
+}
+
 export function paymentMode(): "demo" | "stripe" {
   return process.env.APPLIFLOW_PAYMENT_MODE === "stripe" ? "stripe" : "demo";
 }

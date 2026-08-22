@@ -22,6 +22,8 @@ test("server-renders the public AppliFlow launch page", async () => {
   assert.match(html, /Move every job application forward with confidence/i);
   assert.match(html, /Sign in with ChatGPT/i);
   assert.match(html, /Private by design/i);
+  assert.match(html, /Professional CV formats in Word and PDF/i);
+  assert.match(html, /No formatted CV downloads, reminders or Excel export/i);
 });
 
 test("uses direct navigation for the protected dashboard handoff", async () => {
@@ -67,6 +69,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /safe\.stageHistory = stageHistory\.length/);
   assert.match(stateRoute, /schemaVersion: 7/);
   assert.match(stateRoute, /safe\.customTasks/);
+  assert.match(stateRoute, /hasPaidPlanFeatures\(account\.plan\)/);
+  assert.match(stateRoute, /searchParams\.get\("migration"\) === "1"/);
+  assert.match(stateRoute, /previousTasks/);
   assert.match(stateRoute, /safe\.positionType/);
   assert.match(stateRoute, /safe\.locationType/);
   assert.match(stateRoute, /customSections/);
@@ -111,6 +116,11 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /action:"allowance"/);
   assert.match(dashboard, /AppliFlow does not scrape LinkedIn/);
   assert.match(dashboard, /Export all to Excel/);
+  assert.match(dashboard, /Excel application export/);
+  assert.match(dashboard, /PaidFeatureGate/);
+  assert.match(dashboard, /Unlock formatted CV downloads/);
+  assert.match(dashboard, /Stay on schedule with reminders/);
+  assert.match(dashboard, /paidFeatures=isPaidPlan\(account\?\.plan\)/);
   assert.match(dashboard, /AGE IN STAGE/);
   assert.match(dashboard, /Rejection comment/);
   assert.match(dashboard, /Interview notes/);
@@ -162,6 +172,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /basic: \{ id: "basic", name: "Basic", allowance: 10/);
   assert.match(accountStore, /standard: \{ id: "standard", name: "Standard", allowance: 20/);
   assert.match(accountStore, /EXTRA_CREDIT_PRICE_CENTS = 150/);
+  assert.match(accountStore, /hasPaidPlanFeatures/);
   assert.match(accountStore, /creditAudit: auditRows\.results/);
   assert.match(accountStore, /WHERE a\.status = 'succeeded'/);
   assert.match(accountStore, /getUserCreditAudit\(userId: string\)/);

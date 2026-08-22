@@ -1,4 +1,4 @@
-import { ensureUser, getUsageSummary, getUserCreditAudit, getUserState, saveUserState } from "../../../db/appliflow-store";
+import { ensureUser, getUsageSummary, getUserCreditAudit, getUserState, hasPaidPlanFeatures, saveUserState } from "../../../db/appliflow-store";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 const STAGES = new Set(["Saved", "Applied", "No response after application", "Phone screen", "Interview", "No response after interview", "Assessment", "Offer", "Rejected"]);
@@ -135,6 +135,16 @@ export async function PUT(request: Request) {
     const payload = await request.json() as { state?: unknown };
     const state = cleanState(payload.state);
     if (!state.masterCvs.length) return Response.json({ error: "Keep at least one Master CV in your account." }, { status: 400 });
+    if (!hasPaidPlanFeatures(account.plan)) {
+      const stored = await getUserState(identity.userId);
+      const importingExistingData = new URL(request.url).searchParams.get("migration") === "1" && !stored;
+      if (!importingExistingData) {
+        const previous = cleanState(stored?.state);
+        const previousTasks = new Map(previous.apps.map((application) => [application.id, application.customTasks]));
+        state.apps = state.apps.map((application) => ({ ...application, customTasks: previousTasks.get(application.id) ?? [] }));
+        state.preferences = previous.preferences;
+      }
+    }
     await saveUserState(identity.userId, state);
     return Response.json({ saved: true, state });
   } catch (error) {
