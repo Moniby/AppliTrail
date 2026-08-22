@@ -30,6 +30,9 @@ test("server-renders the public AppliFlow launch page", async () => {
   assert.match(html, /1 month plan/i);
   assert.match(html, /Quarterly plan/i);
   assert.match(html, /What’s included/i);
+  assert.match(html, /Always free/i);
+  assert.match(html, /Cancel anytime/i);
+  assert.match(html, /Month-to-month billing/i);
   assert.match(html, /Included AI generations refresh monthly/i);
 });
 
@@ -167,6 +170,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Buy credits/);
   assert.match(dashboard, /BILLING FREQUENCY/);
   assert.match(dashboard, /billing-frequency-select/);
+  assert.match(dashboard, /planTermBadge/);
+  assert.match(dashboard, /Cancel anytime/);
+  assert.match(dashboard, /Save \$\{interval\.savingsPercent\}%/);
   assert.match(dashboard, /Change billing frequency/);
   assert.match(dashboard, /Your \$\{planName\(currentPlan\)\} plan includes up to/);
   assert.match(dashboard, /Unlimited application tracking/);
@@ -197,6 +203,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /applicationLimit: null, masterCvLimit: null/);
   assert.match(accountStore, /planResourceLimits/);
   assert.match(publicPricing, /Quarterly plan/);
+  assert.match(publicPricing, /termBadge/);
+  assert.match(publicPricing, /Cancel anytime/);
+  assert.match(publicPricing, /Save \$\{interval\.id === "quarterly"/);
   assert.match(publicPricing, /Track up to 3 applications/);
   assert.match(publicPricing, /Create up to 5 Master CVs/);
   assert.match(publicPricing, /Unlimited application tracking/);

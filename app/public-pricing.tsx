@@ -61,9 +61,14 @@ function cad(value: number) {
 }
 
 function renewalText(months: number, total: number) {
-  if (months === 1) return `Renews at ${cad(total)}/month.`;
+  if (months === 1) return `Month-to-month billing · cancel anytime. Renews at ${cad(total)}/month.`;
   if (months === 12) return `Renews at ${cad(total)} every year.`;
   return `Renews at ${cad(total)} every ${months} months.`;
+}
+
+function termBadge(planId: "free" | "basic" | "standard", interval: typeof intervals[number]) {
+  if (planId === "free") return "Always free";
+  return interval.months === 1 ? "Cancel anytime" : `Save ${interval.id === "quarterly" ? "7" : interval.id === "six_month" ? "10" : "20"}%`;
 }
 
 export default function PublicPricing({ ctaHref, signedIn }: { ctaHref: string; signedIn: boolean }) {
@@ -81,7 +86,7 @@ export default function PublicPricing({ ctaHref, signedIn }: { ctaHref: string; 
         const total = paid ? interval.totals[plan.id] : 0;
         const monthly = paid ? total / interval.months : 0;
         return <article className={`pricing-plan ${plan.id === "standard" ? "featured" : ""}`} key={plan.id}>
-          <div className="pricing-plan-title"><span>{plan.name}</span>{plan.id === "standard" && <em>{selectedInterval === "annual" ? "BEST VALUE" : "POPULAR"}</em>}</div>
+          <div className="pricing-plan-title"><span>{plan.name}</span><em className="plan-term-badge">{termBadge(plan.id, interval)}</em></div>
           <p className="pricing-plan-description">{plan.description}</p>
           <strong className="pricing-plan-price">{paid ? cad(monthly) : "CA$0.00"}<small>{paid ? "/mo" : " forever"}</small></strong>
           <a className="pricing-plan-cta" href={ctaHref}>{signedIn ? plan.id === "free" ? "Manage current plan" : `Choose ${plan.name}` : plan.id === "free" ? "Start free" : `Choose ${plan.name}`}</a>
