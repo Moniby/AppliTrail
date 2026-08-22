@@ -2,6 +2,8 @@ import { ensureUser, getUsageSummary, getUserCreditAudit, getUserState, saveUser
 import { authenticationRequired, requestUser } from "../../request-user";
 
 const STAGES = new Set(["Saved", "Applied", "No response after application", "Phone screen", "Interview", "No response after interview", "Assessment", "Offer", "Rejected"]);
+const POSITION_TYPES = new Set(["Full-time", "Contract", "Part-time", "Internship", "Volunteer"]);
+const LOCATION_TYPES = new Set(["Remote", "Hybrid", "Onsite"]);
 const MAX_APPLICATIONS = 500;
 const MAX_MASTER_CVS = 20;
 
@@ -85,6 +87,8 @@ function cleanState(value: unknown) {
     safe.url = safeJobUrl(app.url);
     safe.id = Number.isFinite(Number(app.id)) ? Number(app.id) : Date.now();
     safe.stage = STAGES.has(stage) ? stage : "Saved";
+    safe.positionType = POSITION_TYPES.has(text(app.positionType, 80)) ? text(app.positionType, 80) : "";
+    safe.locationType = LOCATION_TYPES.has(text(app.locationType, 80)) ? text(app.locationType, 80) : "";
     const stageHistory = (Array.isArray(app.stageHistory) ? app.stageHistory : []).slice(0, 100).map((item) => {
       const event = item && typeof item === "object" ? item as Record<string, unknown> : {};
       const eventStage = text(event.stage, 80), enteredAt = text(event.enteredAt, 50), leftAt = text(event.leftAt, 50);
@@ -106,7 +110,7 @@ function cleanState(value: unknown) {
     reminderDaysBefore: Math.max(1, Math.min(30, Math.round(Number(rawPreferences.reminderDaysBefore) || 3))),
     followUpDays: Math.max(3, Math.min(60, Math.round(Number(rawPreferences.followUpDays) || 7))),
   };
-  return { schemaVersion: 6, apps, masterCvs, activeMasterCvId, preferences };
+  return { schemaVersion: 7, apps, masterCvs, activeMasterCvId, preferences };
 }
 
 export async function GET(request: Request) {
