@@ -59,6 +59,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Add to calendar/);
   assert.match(dashboard, /Suspend/);
   assert.match(dashboard, /AppliFlow does not scrape LinkedIn/);
+  assert.match(dashboard, /const loggedInIdentity=account\?\?identity/);
+  assert.match(dashboard, /view==="overview"\?`Hi, \$\{greetingName\}`/);
+  assert.doesNotMatch(dashboard, /profile\.name\|\|account\?\.displayName/);
   assert.match(accountStore, /APPLIFLOW_ADMIN_EMAIL/);
   assert.match(accountStore, /identity\.email\.trim\(\)\.toLowerCase\(\)/);
 });
