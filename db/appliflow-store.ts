@@ -10,9 +10,9 @@ export type PlanId = "free" | "basic" | "standard";
 export type BillingInterval = "monthly" | "quarterly" | "six_month" | "annual";
 
 export const PLAN_CATALOG = {
-  free: { id: "free", name: "Free", allowance: 2, amountCents: 0 },
-  basic: { id: "basic", name: "Basic", allowance: 10, amountCents: 1_000 },
-  standard: { id: "standard", name: "Standard", allowance: 20, amountCents: 1_500 },
+  free: { id: "free", name: "Free", allowance: 2, amountCents: 0, applicationLimit: 3, masterCvLimit: 2 },
+  basic: { id: "basic", name: "Basic", allowance: 10, amountCents: 1_000, applicationLimit: 10, masterCvLimit: 5 },
+  standard: { id: "standard", name: "Standard", allowance: 20, amountCents: 1_500, applicationLimit: null, masterCvLimit: null },
 } as const;
 
 export const BILLING_INTERVALS = [
@@ -49,6 +49,11 @@ function subscriptionProduct(productId: string) {
 
 export function hasPaidPlanFeatures(plan: PlanId) {
   return plan === "basic" || plan === "standard";
+}
+
+export function planResourceLimits(plan: PlanId) {
+  const product = PLAN_CATALOG[plan];
+  return { applications: product.applicationLimit, masterCvs: product.masterCvLimit };
 }
 
 export function paymentMode(): "demo" | "stripe" {

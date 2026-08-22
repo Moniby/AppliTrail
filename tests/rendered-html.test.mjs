@@ -22,10 +22,14 @@ test("server-renders the public AppliFlow launch page", async () => {
   assert.match(html, /Move every job application forward with confidence/i);
   assert.match(html, /Sign in with ChatGPT/i);
   assert.match(html, /Private by design/i);
-  assert.match(html, /Professional CV formats in Word and PDF/i);
-  assert.match(html, /No formatted CV downloads, reminders or Excel export/i);
-  assert.match(html, /Quarterly/i);
-  assert.match(html, /\$96/);
+  assert.match(html, /Professional Word and PDF CV formats/i);
+  assert.match(html, /Track up to 3 applications/i);
+  assert.match(html, /Create up to 2 Master CVs/i);
+  assert.match(html, /Unlimited application tracking/i);
+  assert.match(html, /Unlimited Master CVs/i);
+  assert.match(html, /1 month plan/i);
+  assert.match(html, /Quarterly plan/i);
+  assert.match(html, /What’s included/i);
   assert.match(html, /Included AI generations refresh monthly/i);
 });
 
@@ -37,7 +41,7 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, dashboard, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, dashboard, publicPricing, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
@@ -48,6 +52,7 @@ test("declares portable account, database and file-storage boundaries", async ()
     readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/billing/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/public-pricing.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/preparation-docx.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/appliflow-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0001_free_bucky.sql", import.meta.url), "utf8"),
@@ -75,6 +80,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /schemaVersion: 7/);
   assert.match(stateRoute, /safe\.customTasks/);
   assert.match(stateRoute, /hasPaidPlanFeatures\(account\.plan\)/);
+  assert.match(stateRoute, /planResourceLimits\(account\.plan\)/);
+  assert.match(stateRoute, /state\.apps\.length > limits\.applications/);
+  assert.match(stateRoute, /state\.masterCvs\.length > limits\.masterCvs/);
   assert.match(stateRoute, /searchParams\.get\("migration"\) === "1"/);
   assert.match(stateRoute, /previousTasks/);
   assert.match(stateRoute, /safe\.positionType/);
@@ -158,7 +166,11 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /PLANS & BILLING/);
   assert.match(dashboard, /Buy credits/);
   assert.match(dashboard, /BILLING FREQUENCY/);
+  assert.match(dashboard, /billing-frequency-select/);
   assert.match(dashboard, /Change billing frequency/);
+  assert.match(dashboard, /Your \$\{planName\(currentPlan\)\} plan includes up to/);
+  assert.match(dashboard, /Unlimited application tracking/);
+  assert.match(dashboard, /Unlimited Master CVs/);
   assert.match(dashboard, /AI generations will refresh every month/);
   assert.match(dashboard, /PAYMENT AUDIT/);
   assert.match(dashboard, /View details/);
@@ -180,6 +192,14 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /free: \{ id: "free", name: "Free", allowance: 2/);
   assert.match(accountStore, /basic: \{ id: "basic", name: "Basic", allowance: 10/);
   assert.match(accountStore, /standard: \{ id: "standard", name: "Standard", allowance: 20/);
+  assert.match(accountStore, /applicationLimit: 3, masterCvLimit: 2/);
+  assert.match(accountStore, /applicationLimit: 10, masterCvLimit: 5/);
+  assert.match(accountStore, /applicationLimit: null, masterCvLimit: null/);
+  assert.match(accountStore, /planResourceLimits/);
+  assert.match(publicPricing, /Quarterly plan/);
+  assert.match(publicPricing, /Track up to 3 applications/);
+  assert.match(publicPricing, /Create up to 5 Master CVs/);
+  assert.match(publicPricing, /Unlimited application tracking/);
   assert.match(accountStore, /EXTRA_CREDIT_PRICE_CENTS = 150/);
   assert.match(accountStore, /quarterly.*amounts: \{ basic: 2_800, standard: 4_200 \}/);
   assert.match(accountStore, /six_month.*amounts: \{ basic: 5_400, standard: 8_100 \}/);
