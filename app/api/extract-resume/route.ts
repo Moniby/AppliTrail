@@ -83,12 +83,12 @@ export async function POST(request: Request) {
   const stored = await loadResumeForUser(identity.userId, resume);
   if (!stored?.dataUrl.startsWith("data:")) return Response.json({ error: "Upload a PDF, DOC or DOCX CV before extraction." }, { status: 400 });
 
-  const generation = await beginGeneration(identity, "resume_extract", MODEL);
+  const generation = await beginGeneration(identity, "resume_extract", MODEL, false);
   if (!generation.allowed) return Response.json({
     error: generation.reason === "suspended" ? "This AppliFlow account is suspended. Contact the administrator for help."
       : generation.reason === "rate" ? "Please wait a moment before extracting another CV."
-      : "You have used this month's AI generation allowance. Extra credits can be added by the AppliFlow administrator.",
-  }, { status: generation.reason === "suspended" ? 403 : generation.reason === "rate" ? 429 : 402 });
+      : "CV extraction is temporarily unavailable. Please try again.",
+  }, { status: generation.reason === "suspended" ? 403 : generation.reason === "rate" ? 429 : 503 });
 
   let response: Response;
   try {

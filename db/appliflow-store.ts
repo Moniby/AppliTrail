@@ -185,7 +185,8 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
   const account = await getAccount(userId);
   const { start, end } = monthWindow();
   const row = await getD1().prepare(`SELECT COUNT(*) AS used FROM ai_usage
-      WHERE user_id = ? AND status = 'succeeded' AND created_at >= ? AND created_at < ?`)
+      WHERE user_id = ? AND status = 'succeeded' AND kind != 'resume_extract'
+        AND created_at >= ? AND created_at < ?`)
     .bind(userId, start, end).first<{ used: number }>();
   const used = Number(row?.used ?? 0);
   const total = account.monthlyAllowance + account.bonusCredits;
@@ -208,7 +209,7 @@ export async function getUserCreditAudit(userId: string): Promise<CreditUsageRec
   const rows = await getD1().prepare(`SELECT id, kind, model, input_tokens, output_tokens,
       COALESCE(finished_at, created_at) AS used_at
       FROM ai_usage
-      WHERE user_id = ? AND status = 'succeeded'
+      WHERE user_id = ? AND status = 'succeeded' AND kind != 'resume_extract'
       ORDER BY COALESCE(finished_at, created_at) DESC LIMIT 200`)
     .bind(userId).all<Record<string, unknown>>();
   return rows.results.map((row) => ({
@@ -231,13 +232,13 @@ export async function recordLoginEvent(userId: string, userAgent: string) {
   return true;
 }
 
-export async function beginGeneration(identity: Identity, kind: string, model: string) {
+export async function beginGeneration(identity: Identity, kind: string, model: string, chargeCredit = true) {
   const account = await ensureUser(identity);
   if (account.accountStatus === "suspended") {
     return { allowed: false as const, reason: "suspended" as const, account };
   }
   const usage = await getUsageSummary(identity.userId);
-  if (usage.remaining <= 0) return { allowed: false as const, reason: "quota", usage };
+  if (chargeCredit && usage.remaining <= 0) return { allowed: false as const, reason: "quota", usage };
 
   const minuteAgo = new Date(Date.now() - 60_000).toISOString();
   const recent = await getD1().prepare(`SELECT COUNT(*) AS count FROM ai_usage
@@ -292,19 +293,20 @@ export async function adminSummary(identity: Identity) {
   const totals = await db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
       (SELECT COUNT(*) FROM users WHERE account_status = 'suspended') AS suspended,
-      (SELECT COUNT(*) FROM ai_usage WHERE status = 'succeeded') AS generations,
-      (SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM ai_usage WHERE status = 'succeeded') AS tokens`)
+      (SELECT COUNT(*) FROM ai_usage WHERE status = 'succeeded' AND kind != 'resume_extract') AS generations,
+      (SELECT COALESCE(SUM(input_tokens + output_tokens), 0) FROM ai_usage
+        WHERE status = 'succeeded' AND kind != 'resume_extract') AS tokens`)
     .first<{ users: number; suspended: number; generations: number; tokens: number }>();
   const rows = await db.prepare(`SELECT u.id, u.email, u.display_name, u.plan, u.monthly_allowance,
       u.bonus_credits, u.account_status, u.created_at, u.updated_at, COUNT(a.id) AS generations,
       (SELECT COUNT(*) FROM login_events l WHERE l.user_id = u.id) AS login_count,
       (SELECT MAX(l.created_at) FROM login_events l WHERE l.user_id = u.id) AS last_login_at
-      FROM users u LEFT JOIN ai_usage a ON a.user_id = u.id AND a.status = 'succeeded'
+      FROM users u LEFT JOIN ai_usage a ON a.user_id = u.id AND a.status = 'succeeded' AND a.kind != 'resume_extract'
       GROUP BY u.id ORDER BY u.created_at DESC LIMIT 100`).all<Record<string, unknown>>();
   const auditRows = await db.prepare(`SELECT a.id, a.kind, a.model, a.input_tokens, a.output_tokens,
       COALESCE(a.finished_at, a.created_at) AS used_at, u.email, u.display_name
       FROM ai_usage a JOIN users u ON u.id = a.user_id
-      WHERE a.status = 'succeeded'
+      WHERE a.status = 'succeeded' AND a.kind != 'resume_extract'
       ORDER BY COALESCE(a.finished_at, a.created_at) DESC LIMIT 200`).all<Record<string, unknown>>();
   return {
     totals: { users: Number(totals?.users ?? 0), suspended: Number(totals?.suspended ?? 0), generations: Number(totals?.generations ?? 0), tokens: Number(totals?.tokens ?? 0) },
@@ -329,7 +331,8 @@ export async function adminUserDetail(identity: Identity, targetUserId: string) 
   const db = getD1();
   const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance, bonus_credits,
       account_status, created_at, updated_at,
-      (SELECT COUNT(*) FROM ai_usage a WHERE a.user_id = users.id AND a.status = 'succeeded') AS generations,
+      (SELECT COUNT(*) FROM ai_usage a WHERE a.user_id = users.id
+        AND a.status = 'succeeded' AND a.kind != 'resume_extract') AS generations,
       (SELECT MAX(l.created_at) FROM login_events l WHERE l.user_id = users.id) AS last_login_at
       FROM users WHERE id = ?`).bind(targetUserId).first<Record<string, unknown>>();
   if (!row) throw new Error("User not found.");

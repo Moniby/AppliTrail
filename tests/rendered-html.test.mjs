@@ -65,7 +65,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /sectionOrder/);
   assert.match(stateRoute, /getUserCreditAudit\(identity\.userId\)/);
   assert.match(resumeRoute, /resumeKey\(identity\.userId/);
-  assert.match(extractResumeRoute, /beginGeneration\(identity, "resume_extract", MODEL\)/);
+  assert.match(extractResumeRoute, /beginGeneration\(identity, "resume_extract", MODEL, false\)/);
   assert.match(extractResumeRoute, /type: "input_file"/);
   assert.match(extractResumeRoute, /Never invent, infer, improve or complete facts/);
   assert.match(extractResumeRoute, /suggested_master_cv_name/);
@@ -102,13 +102,15 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Master CV Name/);
   assert.match(dashboard, /Technical tools & technologies/);
   assert.match(dashboard, /Custom section/);
-  assert.match(dashboard, /resume_extract/);
+  assert.match(dashboard, /CV extraction does not use an AI credit/);
+  assert.match(dashboard, /No AI credit will be used/);
+  assert.match(dashboard, /Upload &amp; extract/);
   assert.match(dashboard, /Credit usage audit/i);
   assert.match(dashboard, /AI CREDIT CONFIRMATION/);
   assert.match(dashboard, /Use 1 credit & generate/);
   assert.match(dashboard, /1 credit is charged only when generation succeeds/);
   assert.match(dashboard, /YOUR AI CREDIT HISTORY/);
-  assert.match(dashboard, /Failed attempts do not use a credit/);
+  assert.match(dashboard, /Failed attempts and CV extraction do not use a credit/);
   assert.match(dashboard, /View details/);
   assert.match(dashboard, /Login information/);
   assert.match(dashboard, /Passwords, IP addresses/);
@@ -124,6 +126,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /WHERE a\.status = 'succeeded'/);
   assert.match(accountStore, /getUserCreditAudit\(userId: string\)/);
   assert.match(accountStore, /WHERE user_id = \? AND status = 'succeeded'/);
+  assert.match(accountStore, /chargeCredit = true/);
+  assert.match(accountStore, /kind != 'resume_extract'/);
   assert.match(accountStore, /CREATE TABLE IF NOT EXISTS login_events/);
   assert.match(accountStore, /adminUserDetail/);
   assert.match(accountStore, /datetime\('now', '-5 minutes'\)/);
