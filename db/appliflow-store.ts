@@ -24,6 +24,15 @@ export type UsageSummary = {
   resetsAt: string;
 };
 
+export type CreditUsageRecord = {
+  id: number;
+  kind: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  usedAt: string;
+};
+
 const STATE_LIMIT_BYTES = 1_800_000;
 let schemaPromise: Promise<void> | null = null;
 
@@ -181,6 +190,26 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
   };
 }
 
+function databaseTimestamp(value: unknown) {
+  const timestamp = String(value ?? "");
+  return timestamp.includes("T") ? timestamp : `${timestamp.replace(" ", "T")}Z`;
+}
+
+export async function getUserCreditAudit(userId: string): Promise<CreditUsageRecord[]> {
+  await ensureSchema();
+  const rows = await getD1().prepare(`SELECT id, kind, model, input_tokens, output_tokens,
+      COALESCE(finished_at, created_at) AS used_at
+      FROM ai_usage
+      WHERE user_id = ? AND status = 'succeeded'
+      ORDER BY COALESCE(finished_at, created_at) DESC LIMIT 200`)
+    .bind(userId).all<Record<string, unknown>>();
+  return rows.results.map((row) => ({
+    id: Number(row.id), kind: String(row.kind), model: String(row.model),
+    inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens),
+    usedAt: databaseTimestamp(row.used_at),
+  }));
+}
+
 export async function beginGeneration(identity: Identity, kind: string, model: string) {
   const account = await ensureUser(identity);
   if (account.accountStatus === "suspended") {
@@ -263,7 +292,7 @@ export async function adminSummary(identity: Identity) {
     })),
     creditAudit: auditRows.results.map((row) => ({
       id: Number(row.id), kind: String(row.kind), model: String(row.model),
-      inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens), usedAt: String(row.used_at),
+      inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens), usedAt: databaseTimestamp(row.used_at),
       email: String(row.email), displayName: String(row.display_name),
     })),
   };

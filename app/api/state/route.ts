@@ -1,4 +1,4 @@
-import { ensureUser, getUsageSummary, getUserState, saveUserState } from "../../../db/appliflow-store";
+import { ensureUser, getUsageSummary, getUserCreditAudit, getUserState, saveUserState } from "../../../db/appliflow-store";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 const STAGES = new Set(["Saved", "Applied", "No response after application", "Phone screen", "Interview", "No response after interview", "Assessment", "Offer", "Rejected"]);
@@ -88,8 +88,8 @@ export async function GET(request: Request) {
   try {
     const account = await ensureUser(identity);
     if (account.accountStatus === "suspended") return Response.json({ error: "This AppliFlow account is suspended. Contact the administrator for help." }, { status: 403 });
-    const [stored, usage] = await Promise.all([getUserState(identity.userId), getUsageSummary(identity.userId)]);
-    return Response.json({ account, usage, hasState: Boolean(stored), state: stored?.state ?? null, updatedAt: stored?.updatedAt ?? null });
+    const [stored, usage, creditAudit] = await Promise.all([getUserState(identity.userId), getUsageSummary(identity.userId), getUserCreditAudit(identity.userId)]);
+    return Response.json({ account, usage, creditAudit, hasState: Boolean(stored), state: stored?.state ?? null, updatedAt: stored?.updatedAt ?? null });
   } catch {
     return Response.json({ error: "AppliFlow could not load your account data. Please refresh and try again." }, { status: 500 });
   }

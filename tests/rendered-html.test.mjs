@@ -57,6 +57,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /interviewNotes: 20_000/);
   assert.match(stateRoute, /safe\.stageHistory = stageHistory\.length/);
   assert.match(stateRoute, /schemaVersion: 4/);
+  assert.match(stateRoute, /getUserCreditAudit\(identity\.userId\)/);
   assert.match(resumeRoute, /resumeKey\(identity\.userId/);
   assert.match(adminRoute, /setAccountStatus/);
   assert.match(adminRoute, /setMonthlyAllowance/);
@@ -76,6 +77,11 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Interview notes/);
   assert.match(dashboard, /Stage ageing/);
   assert.match(dashboard, /Credit usage audit/i);
+  assert.match(dashboard, /AI CREDIT CONFIRMATION/);
+  assert.match(dashboard, /Use 1 credit & generate/);
+  assert.match(dashboard, /1 credit is charged only when generation succeeds/);
+  assert.match(dashboard, /YOUR AI CREDIT HISTORY/);
+  assert.match(dashboard, /Failed attempts do not use a credit/);
   assert.match(dashboard, /\^\[\\s\]\*\[=\+\\-@\]/);
   assert.match(dashboard, /const loggedInIdentity=account\?\?identity/);
   assert.match(dashboard, /view==="overview"\?`Hi, \$\{greetingName\}`/);
@@ -85,4 +91,6 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /identity\.displayName, 5, isAdmin/);
   assert.match(accountStore, /creditAudit: auditRows\.results/);
   assert.match(accountStore, /WHERE a\.status = 'succeeded'/);
+  assert.match(accountStore, /getUserCreditAudit\(userId: string\)/);
+  assert.match(accountStore, /WHERE user_id = \? AND status = 'succeeded'/);
 });
