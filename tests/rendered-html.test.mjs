@@ -32,11 +32,12 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, accountRoute, adminRoute, dashboard, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, accountRoute, adminRoute, dashboard, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/resumes/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/extract-resume/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/account/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
@@ -59,9 +60,15 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /rejectionComment: 10_000/);
   assert.match(stateRoute, /interviewNotes: 20_000/);
   assert.match(stateRoute, /safe\.stageHistory = stageHistory\.length/);
-  assert.match(stateRoute, /schemaVersion: 4/);
+  assert.match(stateRoute, /schemaVersion: 5/);
+  assert.match(stateRoute, /customSections/);
+  assert.match(stateRoute, /sectionOrder/);
   assert.match(stateRoute, /getUserCreditAudit\(identity\.userId\)/);
   assert.match(resumeRoute, /resumeKey\(identity\.userId/);
+  assert.match(extractResumeRoute, /beginGeneration\(identity, "resume_extract", MODEL\)/);
+  assert.match(extractResumeRoute, /type: "input_file"/);
+  assert.match(extractResumeRoute, /Never invent, infer, improve or complete facts/);
+  assert.match(extractResumeRoute, /suggested_master_cv_name/);
   assert.match(accountRoute, /action === "record-login"/);
   assert.match(accountRoute, /recordLoginEvent/);
   assert.match(adminRoute, /setAccountStatus/);
@@ -85,6 +92,17 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Rejection comment/);
   assert.match(dashboard, /Interview notes/);
   assert.match(dashboard, /Stage ageing/);
+  assert.match(dashboard, /APPLICATION AGE/);
+  assert.match(dashboard, /since application/);
+  assert.match(dashboard, /generation-progress-bar/);
+  assert.match(dashboard, /actively comparing the saved job description/);
+  assert.match(dashboard, /Review your CV/);
+  assert.match(dashboard, /Upload & extract CV/);
+  assert.match(dashboard, /Save Master CV/);
+  assert.match(dashboard, /Master CV Name/);
+  assert.match(dashboard, /Technical tools & technologies/);
+  assert.match(dashboard, /Custom section/);
+  assert.match(dashboard, /resume_extract/);
   assert.match(dashboard, /Credit usage audit/i);
   assert.match(dashboard, /AI CREDIT CONFIRMATION/);
   assert.match(dashboard, /Use 1 credit & generate/);

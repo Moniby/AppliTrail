@@ -20,11 +20,21 @@ function safeJobUrl(value: unknown) {
 
 function cleanProfile(value: unknown) {
   const profile = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const customSections = (Array.isArray(profile.customSections) ? profile.customSections : []).slice(0, 20).map((item, index) => {
+    const section = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return { id: text(section.id, 100).replace(/[^a-z0-9-]/gi, "-") || `section-${index + 1}`, title: text(section.title, 200) || "Additional section", content: text(section.content) };
+  });
+  const standardSections = ["summary", "skills", "experience", "education", "certifications", "projects", "tools"];
+  const allowedSections = new Set([...standardSections, ...customSections.map((section) => `custom:${section.id}`)]);
+  const hasSectionOrder = Array.isArray(profile.sectionOrder);
+  const requestedOrder = (hasSectionOrder ? profile.sectionOrder as unknown[] : standardSections).map((item) => text(item, 120)).filter((item) => allowedSections.has(item));
   return {
     name: text(profile.name, 200), headline: text(profile.headline, 300), phone: text(profile.phone, 120),
     email: text(profile.email, 320), address: text(profile.address, 500), linkedin: text(profile.linkedin, 500),
     summary: text(profile.summary), skills: text(profile.skills), experience: text(profile.experience), education: text(profile.education),
     certifications: Array.isArray(profile.certifications) ? profile.certifications.map((item) => text(item, 500)).filter(Boolean).slice(0, 50) : [],
+    projects: text(profile.projects), tools: text(profile.tools), customSections,
+    sectionOrder: Array.from(new Set([...requestedOrder, ...customSections.map((section) => `custom:${section.id}`)])),
   };
 }
 
@@ -79,7 +89,7 @@ function cleanState(value: unknown) {
     reminderDaysBefore: Math.max(1, Math.min(30, Math.round(Number(rawPreferences.reminderDaysBefore) || 3))),
     followUpDays: Math.max(3, Math.min(60, Math.round(Number(rawPreferences.followUpDays) || 7))),
   };
-  return { schemaVersion: 4, apps, masterCvs, activeMasterCvId, preferences };
+  return { schemaVersion: 5, apps, masterCvs, activeMasterCvId, preferences };
 }
 
 export async function GET(request: Request) {

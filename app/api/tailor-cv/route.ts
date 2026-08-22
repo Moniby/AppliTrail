@@ -10,6 +10,9 @@ type ProfilePayload = {
   experience: string;
   education: string;
   certifications: string[];
+  projects: string;
+  tools: string;
+  customSections: Array<{ title: string; content: string }>;
 };
 
 type ResumePayload = {
@@ -131,6 +134,11 @@ function cleanProfile(profile: Partial<ProfilePayload> | undefined): ProfilePayl
     education: cleanText(profile?.education),
     certifications: Array.isArray(profile?.certifications)
       ? profile.certifications.map((item) => cleanText(item, 500)).filter(Boolean).slice(0, 50)
+      : [],
+    projects: cleanText(profile?.projects),
+    tools: cleanText(profile?.tools),
+    customSections: Array.isArray(profile?.customSections)
+      ? profile.customSections.map((item) => ({ title: cleanText(item?.title, 200), content: cleanText(item?.content) })).filter((item) => item.title || item.content).slice(0, 20)
       : [],
   };
 }
