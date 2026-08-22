@@ -32,13 +32,14 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, adminRoute, dashboard, phaseThreeMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, adminRoute, dashboard, accountStore, phaseThreeMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/resumes/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../db/appliflow-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0001_free_bucky.sql", import.meta.url), "utf8"),
   ]);
   const hosting = JSON.parse(hostingText);
@@ -58,4 +59,6 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Add to calendar/);
   assert.match(dashboard, /Suspend/);
   assert.match(dashboard, /AppliFlow does not scrape LinkedIn/);
+  assert.match(accountStore, /APPLIFLOW_ADMIN_EMAIL/);
+  assert.match(accountStore, /identity\.email\.trim\(\)\.toLowerCase\(\)/);
 });

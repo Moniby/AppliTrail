@@ -28,8 +28,11 @@ const STATE_LIMIT_BYTES = 1_800_000;
 let schemaPromise: Promise<void> | null = null;
 
 export function isAdminIdentity(identity: Identity) {
-  const configured = process.env.APPLIFLOW_ADMIN_USER_ID?.trim();
-  return configured ? identity.userId === configured : process.env.NODE_ENV !== "production";
+  const configuredUserId = process.env.APPLIFLOW_ADMIN_USER_ID?.trim();
+  const configuredEmail = process.env.APPLIFLOW_ADMIN_EMAIL?.trim().toLowerCase();
+  if (configuredUserId && identity.userId === configuredUserId) return true;
+  if (configuredEmail && identity.email.trim().toLowerCase() === configuredEmail) return true;
+  return !configuredUserId && !configuredEmail && process.env.NODE_ENV !== "production";
 }
 
 export async function ensureSchema() {
