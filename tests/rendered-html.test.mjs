@@ -32,7 +32,7 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, adminRoute, dashboard, accountStore, phaseThreeMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, adminRoute, dashboard, accountStore, phaseThreeMigration, allowanceMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
@@ -41,6 +41,7 @@ test("declares portable account, database and file-storage boundaries", async ()
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../db/appliflow-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0001_free_bucky.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0002_windy_rawhide_kid.sql", import.meta.url), "utf8"),
   ]);
   const hosting = JSON.parse(hostingText);
   assert.equal(hosting.d1, "DB");
@@ -53,15 +54,21 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /url\.protocol === "https:" \|\| url\.protocol === "http:"/);
   assert.match(resumeRoute, /resumeKey\(identity\.userId/);
   assert.match(adminRoute, /setAccountStatus/);
+  assert.match(adminRoute, /setMonthlyAllowance/);
   assert.match(phaseThreeMigration, /ALTER TABLE `users` ADD `account_status`/);
+  assert.match(allowanceMigration, /`monthly_allowance` integer DEFAULT 5 NOT NULL/);
+  assert.match(allowanceMigration, /SET `monthly_allowance` = 5/);
   assert.match(dashboard, /Import my data/);
   assert.match(dashboard, /Delete account data/);
   assert.match(dashboard, /Add to calendar/);
   assert.match(dashboard, /Suspend/);
+  assert.match(dashboard, /Monthly limit/);
+  assert.match(dashboard, /action:"allowance"/);
   assert.match(dashboard, /AppliFlow does not scrape LinkedIn/);
   assert.match(dashboard, /const loggedInIdentity=account\?\?identity/);
   assert.match(dashboard, /view==="overview"\?`Hi, \$\{greetingName\}`/);
   assert.doesNotMatch(dashboard, /profile\.name\|\|account\?\.displayName/);
   assert.match(accountStore, /APPLIFLOW_ADMIN_EMAIL/);
   assert.match(accountStore, /identity\.email\.trim\(\)\.toLowerCase\(\)/);
+  assert.match(accountStore, /identity\.displayName, 5, isAdmin/);
 });

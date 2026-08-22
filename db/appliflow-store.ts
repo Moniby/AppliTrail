@@ -45,7 +45,7 @@ export async function ensureSchema() {
         email TEXT NOT NULL,
         display_name TEXT NOT NULL,
         plan TEXT NOT NULL DEFAULT 'beta',
-        monthly_allowance INTEGER NOT NULL DEFAULT 20,
+        monthly_allowance INTEGER NOT NULL DEFAULT 5,
         bonus_credits INTEGER NOT NULL DEFAULT 0,
         is_admin INTEGER NOT NULL DEFAULT 0,
         account_status TEXT NOT NULL DEFAULT 'active',
@@ -104,9 +104,8 @@ export async function ensureUser(identity: Identity): Promise<AccountRecord> {
         email = excluded.email,
         display_name = excluded.display_name,
         is_admin = CASE WHEN excluded.is_admin = 1 THEN 1 ELSE users.is_admin END,
-        monthly_allowance = CASE WHEN excluded.is_admin = 1 AND users.monthly_allowance < 200 THEN 200 ELSE users.monthly_allowance END,
         updated_at = CURRENT_TIMESTAMP`)
-    .bind(identity.userId, identity.email, identity.displayName, isAdmin ? 200 : 20, isAdmin ? 1 : 0)
+    .bind(identity.userId, identity.email, identity.displayName, 5, isAdmin ? 1 : 0)
     .run();
   return getAccount(identity.userId);
 }
@@ -260,11 +259,11 @@ export async function adminSummary(identity: Identity) {
   };
 }
 
-export async function grantBonusCredits(identity: Identity, targetUserId: string, amount: number) {
+export async function setMonthlyAllowance(identity: Identity, targetUserId: string, amount: number) {
   const account = await ensureUser(identity);
   if (!account.isAdmin) throw new Error("Administrator access is required.");
   const safeAmount = Math.max(0, Math.min(500, Math.round(amount)));
-  await getD1().prepare(`UPDATE users SET bonus_credits = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+  await getD1().prepare(`UPDATE users SET monthly_allowance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .bind(safeAmount, targetUserId).run();
 }
 

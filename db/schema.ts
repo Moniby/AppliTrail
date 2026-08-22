@@ -6,7 +6,7 @@ export const users = sqliteTable("users", {
   email: text("email").notNull(),
   displayName: text("display_name").notNull(),
   plan: text("plan").notNull().default("beta"),
-  monthlyAllowance: integer("monthly_allowance").notNull().default(20),
+  monthlyAllowance: integer("monthly_allowance").notNull().default(5),
   bonusCredits: integer("bonus_credits").notNull().default(0),
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
   accountStatus: text("account_status").notNull().default("active"),
