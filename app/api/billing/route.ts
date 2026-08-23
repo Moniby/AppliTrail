@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "The billing request could not be completed.";
     console.error("AppliTrail billing request failed", { message });
-    const status = /invalid|choose|disabled|configured|hold up to|manage subscription|billing profile/i.test(message) ? 400 : 500;
+    const status = /invalid|choose|disabled|configured|hold up to|manage subscription|billing profile|paid plans?/i.test(message) ? 400 : 500;
     return Response.json({ error: message }, { status });
   }
 }

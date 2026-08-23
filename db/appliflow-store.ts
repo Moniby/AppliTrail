@@ -904,6 +904,9 @@ export async function completeDemoCheckout(identity: Identity, productId: string
   }
 
   if (productId === "extra_credits") {
+    if (account.plan === "free") {
+      throw new Error("Extra AI credits are available only on Basic and Standard plans.");
+    }
     const safeQuantity = Math.max(1, Math.min(20, Math.round(quantity)));
     if (account.bonusCredits + safeQuantity > 20) {
       throw new Error("Sandbox accounts can hold up to 20 purchased credits at a time. Use some credits before adding more.");

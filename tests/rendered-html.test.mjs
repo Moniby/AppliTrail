@@ -145,6 +145,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stripeBilling, /Stripe test mode requires a Stripe test secret key/);
   assert.match(stripeBilling, /checkout\.session\.completed/);
   assert.match(stripeBilling, /This Stripe checkout does not belong to the signed-in AppliTrail account/);
+  assert.match(stripeBilling, /Extra AI credits are available only on Basic and Standard plans/);
+  assert.match(accountStore, /Extra AI credits are available only on Basic and Standard plans/);
   assert.match(stripeWebhookMigration, /CREATE TABLE `stripe_webhook_events`/);
   assert.match(appSettingsMigration, /CREATE TABLE `app_settings`/);
   assert.match(dashboard, /Import my data/);
@@ -200,6 +202,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /SANDBOX · NO CARD CHARGED/);
   assert.match(dashboard, /PLANS & BILLING/);
   assert.match(dashboard, /Buy credits/);
+  assert.match(dashboard, /Available on paid plans/);
+  assert.match(publicPricing, /Extra-credit purchases are not available on the Free plan/);
   assert.match(dashboard, /BILLING FREQUENCY/);
   assert.match(dashboard, /billing-frequency-select/);
   assert.match(dashboard, /planTermBadge/);

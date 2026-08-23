@@ -113,3 +113,4 @@
 @media(max-width:900px){.billing-frequency-row,.pricing-section-head{align-items:stretch;flex-direction:column}.billing-frequency-select,.landing-pricing .billing-frequency-select{width:100%;min-width:0;flex-basis:auto}.pricing-plan,.landing-pricing-grid .pricing-plan{min-height:0}}
 @media(max-width:650px){.landing-pricing{padding:26px 18px}.pricing-section-head h2{font-size:29px}.pricing-plan,.landing-pricing-grid .pricing-plan{padding:22px}.pricing-plan .pricing-plan-price,.landing-pricing-grid .pricing-plan-price{font-size:29px}}
 .pricing-plan .plan-term-badge,.landing-pricing-grid .plan-term-badge{white-space:nowrap}.pricing-plan .pricing-plan-renewal,.landing-pricing-grid .pricing-plan-renewal{min-height:34px;line-height:1.45}
+.credit-shop-locked>div{grid-column:1/-1}

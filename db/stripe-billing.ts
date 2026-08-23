@@ -344,10 +344,14 @@ export async function createStripeCheckout(
 ) {
   if (paymentMode() !== "stripe") throw new Error("Stripe checkout is disabled for this deployment.");
   const cleanedRequestId = cleanRequestId(requestId);
-  const linkage = await ensureStripeCustomer(identity);
   const isCreditPurchase = productId === "extra_credits";
   const subscription = subscriptionProduct(productId);
   if (!isCreditPurchase && !subscription) throw new Error("Choose a valid AppliTrail plan or credit purchase.");
+  const currentLinkage = await getStripeLinkage(identity);
+  if (isCreditPurchase && currentLinkage.account.plan === "free") {
+    throw new Error("Extra AI credits are available only on Basic and Standard plans.");
+  }
+  const linkage = await ensureStripeCustomer(identity);
   if (subscription && linkage.account.plan !== "free" && isStripeSubscriptionId(linkage.subscriptionId)) {
     throw new Error("Use Manage subscription to change an active Stripe plan.");
   }
