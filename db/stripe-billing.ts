@@ -1,4 +1,7 @@
 import {
+  BILLING_INTERVALS,
+  EXTRA_CREDIT_PRICE_CENTS,
+  PLAN_CATALOG,
   type Identity,
   getAppSetting,
   getStripeLinkage,
@@ -12,10 +15,18 @@ const STRIPE_API_BASE = "https://api.stripe.com/v1";
 const STRIPE_API_VERSION = "2026-02-25.clover";
 
 type StripeResponse = Record<string, unknown> & { id?: string; url?: string };
+type StripeCatalog = {
+  accountId: string;
+  products: { basic: string; standard: string; extraCredits: string };
+  prices: Record<string, string>;
+};
 
 function stripeSecretKey() {
   const key = process.env.STRIPE_SECRET_KEY?.trim();
   if (!key) throw new Error("Stripe test payments are not configured yet.");
+  if (process.env.STRIPE_ENVIRONMENT !== "live" && !/^[sr]k_test_/.test(key)) {
+    throw new Error("Stripe test mode requires a Stripe test secret key.");
+  }
   return key;
 }
 
@@ -49,6 +60,18 @@ async function stripeRequest(path: string, values: Record<string, string>, idemp
   return body;
 }
 
+async function stripeRetrieve(path: string) {
+  const response = await fetch(`${STRIPE_API_BASE}${path}`, {
+    headers: {
+      Authorization: `Bearer ${stripeSecretKey()}`,
+      "Stripe-Version": STRIPE_API_VERSION,
+    },
+  });
+  const body = await response.json().catch(() => ({})) as StripeResponse & { error?: { message?: string } };
+  if (!response.ok) throw new Error(body.error?.message || "Stripe could not complete this request.");
+  return body;
+}
+
 function priceEnvironmentName(productId: string) {
   const names: Record<string, string> = {
     basic_monthly: "STRIPE_PRICE_BASIC_MONTHLY",
@@ -64,10 +87,155 @@ function priceEnvironmentName(productId: string) {
   return names[productId] ?? null;
 }
 
-function stripePriceId(productId: string) {
+function environmentPriceId(productId: string) {
   const environmentName = priceEnvironmentName(productId);
   const priceId = environmentName ? process.env[environmentName]?.trim() : "";
   if (!environmentName || !priceId) throw new Error("This Stripe test price is not configured yet.");
+  return priceId;
+}
+
+const catalogProductIds = ["basic", "standard"] as const;
+const catalogProductKeys = {
+  basic: "stripe_product_basic",
+  standard: "stripe_product_standard",
+  extraCredits: "stripe_product_extra_credits",
+} as const;
+const catalogPriceIds = [
+  ...catalogProductIds.flatMap((plan) => BILLING_INTERVALS.map((interval) => `${plan}_${interval.id}`)),
+  "extra_credits",
+];
+
+async function storedStripeCatalog(accountId: string): Promise<StripeCatalog | null> {
+  if (await getAppSetting("stripe_catalog_account_id") !== accountId) return null;
+  const [basic, standard, extraCredits, ...prices] = await Promise.all([
+    getAppSetting(catalogProductKeys.basic),
+    getAppSetting(catalogProductKeys.standard),
+    getAppSetting(catalogProductKeys.extraCredits),
+    ...catalogPriceIds.map((productId) => getAppSetting(`stripe_price_${productId}`)),
+  ]);
+  if (!basic || !standard || !extraCredits || prices.some((price) => !price)) return null;
+  return {
+    accountId,
+    products: { basic, standard, extraCredits },
+    prices: Object.fromEntries(catalogPriceIds.map((productId, index) => [productId, prices[index]!])),
+  };
+}
+
+async function saveStripeCatalog(catalog: StripeCatalog) {
+  await saveAppSetting("stripe_catalog_account_id", catalog.accountId);
+  await saveAppSetting(catalogProductKeys.basic, catalog.products.basic);
+  await saveAppSetting(catalogProductKeys.standard, catalog.products.standard);
+  await saveAppSetting(catalogProductKeys.extraCredits, catalog.products.extraCredits);
+  for (const productId of catalogPriceIds) {
+    await saveAppSetting(`stripe_price_${productId}`, catalog.prices[productId]);
+  }
+}
+
+async function environmentStripeCatalog(accountId: string): Promise<StripeCatalog | null> {
+  try {
+    const prices = Object.fromEntries(catalogPriceIds.map((productId) => [productId, environmentPriceId(productId)]));
+    const products = {
+      basic: process.env.STRIPE_PRODUCT_BASIC?.trim() || "",
+      standard: process.env.STRIPE_PRODUCT_STANDARD?.trim() || "",
+      extraCredits: "",
+    };
+    if (!products.basic || !products.standard) return null;
+    const retrieved = await Promise.all(catalogPriceIds.map((productId) =>
+      stripeRetrieve(`/prices/${encodeURIComponent(prices[productId])}`)));
+    const extraProduct = String(retrieved[catalogPriceIds.indexOf("extra_credits")]?.product || "");
+    if (!extraProduct) return null;
+    return { accountId, products: { ...products, extraCredits: extraProduct }, prices };
+  } catch {
+    return null;
+  }
+}
+
+async function createStripeCatalog(accountId: string): Promise<StripeCatalog> {
+  const productValues = {
+    basic: {
+      name: "AppliTrail Basic",
+      description: "10 monthly AI generations, 10 tracked applications and 5 Master CVs.",
+    },
+    standard: {
+      name: "AppliTrail Standard",
+      description: "20 monthly AI generations with unlimited application and Master CV tracking.",
+    },
+  } as const;
+  const products = {} as StripeCatalog["products"];
+  for (const plan of catalogProductIds) {
+    const product = await stripeRequest("/products", {
+      ...productValues[plan],
+      "metadata[app]": "applitrail",
+      "metadata[plan]": plan,
+    }, `applitrail-catalog-v2-${accountId}-product-${plan}`);
+    if (!product.id) throw new Error(`Stripe did not create the ${PLAN_CATALOG[plan].name} product.`);
+    products[plan] = product.id;
+  }
+  const extraProduct = await stripeRequest("/products", {
+    name: "AppliTrail Extra AI Credit",
+    description: "One additional AppliTrail AI generation credit.",
+    "metadata[app]": "applitrail",
+    "metadata[type]": "extra_credit",
+  }, `applitrail-catalog-v2-${accountId}-product-extra-credit`);
+  if (!extraProduct.id) throw new Error("Stripe did not create the extra-credit product.");
+  products.extraCredits = extraProduct.id;
+
+  const prices: Record<string, string> = {};
+  for (const plan of catalogProductIds) {
+    for (const interval of BILLING_INTERVALS) {
+      const productId = `${plan}_${interval.id}`;
+      const price = await stripeRequest("/prices", {
+        currency: "cad",
+        unit_amount: String(interval.amounts[plan]),
+        product: products[plan],
+        "recurring[interval]": "month",
+        "recurring[interval_count]": String(interval.months),
+        "metadata[app]": "applitrail",
+        "metadata[plan]": plan,
+        "metadata[billing_interval]": interval.id,
+      }, `applitrail-catalog-v2-${accountId}-price-${productId}`);
+      if (!price.id) throw new Error(`Stripe did not create the ${PLAN_CATALOG[plan].name} ${interval.label} price.`);
+      prices[productId] = price.id;
+    }
+  }
+  const creditPrice = await stripeRequest("/prices", {
+    currency: "cad",
+    unit_amount: String(EXTRA_CREDIT_PRICE_CENTS),
+    product: products.extraCredits,
+    "metadata[app]": "applitrail",
+    "metadata[type]": "extra_credit",
+  }, `applitrail-catalog-v2-${accountId}-price-extra-credit`);
+  if (!creditPrice.id) throw new Error("Stripe did not create the extra-credit price.");
+  prices.extra_credits = creditPrice.id;
+  return { accountId, products, prices };
+}
+
+let catalogPromise: Promise<StripeCatalog> | null = null;
+
+async function ensureStripeCatalog() {
+  if (catalogPromise) return catalogPromise;
+  catalogPromise = (async () => {
+    const account = await stripeRetrieve("/account");
+    if (!account.id) throw new Error("Stripe did not return the account for this test key.");
+    const stored = await storedStripeCatalog(account.id);
+    if (stored) return stored;
+    const environment = await environmentStripeCatalog(account.id);
+    const catalog = environment ?? await createStripeCatalog(account.id);
+    await saveStripeCatalog(catalog);
+    return catalog;
+  })();
+  try {
+    return await catalogPromise;
+  } catch (error) {
+    catalogPromise = null;
+    throw error;
+  }
+}
+
+async function stripePriceId(productId: string) {
+  const catalog = await ensureStripeCatalog();
+  const priceId = catalog.prices[productId];
+  if (!priceId) throw new Error("Choose a valid AppliTrail plan or credit purchase.");
   return priceId;
 }
 
@@ -116,7 +284,7 @@ export async function createStripeCheckout(
     mode: isCreditPurchase ? "payment" : "subscription",
     customer: linkage.customerId,
     client_reference_id: identity.userId,
-    "line_items[0][price]": stripePriceId(productId),
+    "line_items[0][price]": await stripePriceId(productId),
     "line_items[0][quantity]": String(safeQuantity),
     success_url: `${origin}/app?billing=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/app?billing=cancelled`,
@@ -163,15 +331,14 @@ export async function createStripePortal(identity: Identity, origin: string) {
 }
 
 export async function ensureStripePortalConfiguration() {
-  const configured = process.env.STRIPE_PORTAL_CONFIGURATION_ID?.trim();
-  if (configured) return configured;
-  const stored = await getAppSetting("stripe_portal_configuration_id");
+  const catalog = await ensureStripeCatalog();
+  const settingKey = `stripe_portal_configuration_id_${catalog.accountId}`;
+  const stored = await getAppSetting(settingKey);
   if (stored) return stored;
-  const basicProduct = process.env.STRIPE_PRODUCT_BASIC?.trim();
-  const standardProduct = process.env.STRIPE_PRODUCT_STANDARD?.trim();
-  if (!basicProduct || !standardProduct) throw new Error("Stripe portal products are not configured yet.");
-  const basicPrices = ["basic_monthly", "basic_quarterly", "basic_six_month", "basic_annual"].map(stripePriceId);
-  const standardPrices = ["standard_monthly", "standard_quarterly", "standard_six_month", "standard_annual"].map(stripePriceId);
+  const basicPrices = ["basic_monthly", "basic_quarterly", "basic_six_month", "basic_annual"]
+    .map((productId) => catalog.prices[productId]);
+  const standardPrices = ["standard_monthly", "standard_quarterly", "standard_six_month", "standard_annual"]
+    .map((productId) => catalog.prices[productId]);
   const values: Record<string, string> = {
     "business_profile[headline]": "Manage your AppliTrail subscription",
     "business_profile[privacy_policy_url]": "https://applitrail.com/privacy",
@@ -185,8 +352,8 @@ export async function ensureStripePortalConfiguration() {
     "features[subscription_update][enabled]": "true",
     "features[subscription_update][default_allowed_updates][0]": "price",
     "features[subscription_update][proration_behavior]": "create_prorations",
-    "features[subscription_update][products][0][product]": basicProduct,
-    "features[subscription_update][products][1][product]": standardProduct,
+    "features[subscription_update][products][0][product]": catalog.products.basic,
+    "features[subscription_update][products][1][product]": catalog.products.standard,
   };
   basicPrices.forEach((price, index) => {
     values[`features[subscription_update][products][0][prices][${index}]`] = price;
@@ -195,9 +362,9 @@ export async function ensureStripePortalConfiguration() {
     values[`features[subscription_update][products][1][prices][${index}]`] = price;
   });
   const configuration = await stripeRequest("/billing_portal/configurations", values,
-    "applitrail-customer-portal-v1");
+    `applitrail-customer-portal-v2-${catalog.accountId}`);
   if (!configuration.id) throw new Error("Stripe did not return a portal configuration.");
-  await saveAppSetting("stripe_portal_configuration_id", configuration.id);
+  await saveAppSetting(settingKey, configuration.id);
   return configuration.id;
 }
 

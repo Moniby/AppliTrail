@@ -137,6 +137,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stripeBilling, /Idempotency-Key/);
   assert.match(stripeBilling, /isStripeCustomerId/);
   assert.match(stripeBilling, /isStripeSubscriptionId/);
+  assert.match(stripeBilling, /ensureStripeCatalog/);
+  assert.match(stripeBilling, /stripe_catalog_account_id/);
+  assert.match(stripeBilling, /AppliTrail Extra AI Credit/);
+  assert.match(stripeBilling, /Stripe test mode requires a Stripe test secret key/);
   assert.match(stripeWebhookMigration, /CREATE TABLE `stripe_webhook_events`/);
   assert.match(appSettingsMigration, /CREATE TABLE `app_settings`/);
   assert.match(dashboard, /Import my data/);
