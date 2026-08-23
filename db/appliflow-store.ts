@@ -660,7 +660,7 @@ function stripePeriod(object: Record<string, unknown>) {
   };
 }
 
-function stripeSubscriptionProductId(object: Record<string, unknown>) {
+async function stripeSubscriptionProductId(object: Record<string, unknown>) {
   const items = object.items && typeof object.items === "object"
     ? (object.items as { data?: Array<Record<string, unknown>> }).data
     : undefined;
@@ -683,6 +683,9 @@ function stripeSubscriptionProductId(object: Record<string, unknown>) {
     const match = Object.entries(priceEnvironmentNames)
       .find(([, environmentName]) => process.env[environmentName]?.trim() === priceId);
     if (match) return match[0];
+    for (const productId of Object.keys(priceEnvironmentNames)) {
+      if (await getAppSetting(`stripe_price_${productId}`) === priceId) return productId;
+    }
   }
   return String(stripeMetadata(object).product_id ?? "");
 }
@@ -719,13 +722,23 @@ async function applyStripeCheckoutSession(object: Record<string, unknown>) {
   const subscription = subscriptionProduct(productId);
   if (subscription) {
     if (!["paid", "no_payment_required"].includes(String(object.payment_status ?? ""))) return;
-    await db.prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = 'active',
-        billing_interval = ?, cancel_at_period_end = 0,
-        payment_customer_id = CASE WHEN ? != '' THEN ? ELSE payment_customer_id END,
-        payment_subscription_id = CASE WHEN ? != '' THEN ? ELSE payment_subscription_id END,
-        plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .bind(subscription.plan, PLAN_CATALOG[subscription.plan].allowance, subscription.interval.id,
-        customerId, customerId, subscriptionId, subscriptionId, userId).run();
+    const sessionId = stripeString(object.id);
+    const reference = subscriptionId
+      ? `stripe:subscription:${subscriptionId}:initial` : `stripe:checkout:${sessionId}`;
+    await db.batch([
+      db.prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = 'active',
+          billing_interval = ?, cancel_at_period_end = 0,
+          payment_customer_id = CASE WHEN ? != '' THEN ? ELSE payment_customer_id END,
+          payment_subscription_id = CASE WHEN ? != '' THEN ? ELSE payment_subscription_id END,
+          plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+        .bind(subscription.plan, PLAN_CATALOG[subscription.plan].allowance, subscription.interval.id,
+          customerId, customerId, subscriptionId, subscriptionId, userId),
+      db.prepare(`INSERT OR IGNORE INTO billing_transactions
+          (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
+          VALUES (?, 'stripe', ?, 'subscription_purchase', ?, ?, 0, ?, ?, 'succeeded')`)
+        .bind(userId, reference, productId, subscription.plan, Number(object.amount_total ?? subscription.amountCents),
+          String(object.currency ?? "cad").toUpperCase()),
+    ]);
     return;
   }
   if (productId !== "extra_credits") return;
@@ -746,7 +759,7 @@ async function applyStripeCheckoutSession(object: Record<string, unknown>) {
 async function applyStripeSubscription(object: Record<string, unknown>, deleted = false) {
   const userId = await stripeUserId(object);
   if (!userId) throw new Error("Stripe subscription could not be matched to an AppliTrail account.");
-  const productId = stripeSubscriptionProductId(object);
+  const productId = await stripeSubscriptionProductId(object);
   const subscription = subscriptionProduct(productId);
   const status = String(object.status ?? "");
   if (deleted || status === "canceled") {
@@ -794,12 +807,15 @@ async function applyStripeInvoice(object: Record<string, unknown>, paid: boolean
   const plan = isPlanId(row?.plan) ? row.plan : null;
   const interval = isBillingInterval(row?.billing_interval) ? row.billing_interval : "monthly";
   const invoiceId = stripeString(object.id);
+  const subscriptionId = stripeString(object.subscription);
   const billingReason = String(object.billing_reason ?? "");
+  const reference = billingReason === "subscription_create" && subscriptionId
+    ? `stripe:subscription:${subscriptionId}:initial` : `stripe:invoice:${invoiceId}`;
   await getD1().batch([
     getD1().prepare(`INSERT OR IGNORE INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
       VALUES (?, 'stripe', ?, ?, ?, ?, 0, ?, ?, 'succeeded')`)
-      .bind(userId, `stripe:invoice:${invoiceId}`,
+      .bind(userId, reference,
         billingReason === "subscription_create" ? "subscription_purchase" : "subscription_renewal",
         plan ? `${plan}_${interval}` : "subscription", plan,
         Number(object.amount_paid ?? 0), String(object.currency ?? "cad").toUpperCase()),

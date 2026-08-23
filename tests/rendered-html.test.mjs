@@ -123,6 +123,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(billingRoute, /scheduleSubscriptionCancellation/);
   assert.match(billingRoute, /createStripeCheckout/);
   assert.match(billingRoute, /createStripePortal/);
+  assert.match(billingRoute, /reconcileStripeCheckout/);
+  assert.match(billingRoute, /syncStripeBilling/);
   assert.doesNotMatch(billingRoute, /ensureStripePortalConfiguration/);
   assert.match(stripeWebhookRoute, /request\.text\(\)/);
   assert.match(stripeWebhookRoute, /stripe-signature/);
@@ -141,6 +143,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stripeBilling, /stripe_catalog_account_id/);
   assert.match(stripeBilling, /AppliTrail Extra AI Credit/);
   assert.match(stripeBilling, /Stripe test mode requires a Stripe test secret key/);
+  assert.match(stripeBilling, /checkout\.session\.completed/);
+  assert.match(stripeBilling, /This Stripe checkout does not belong to the signed-in AppliTrail account/);
   assert.match(stripeWebhookMigration, /CREATE TABLE `stripe_webhook_events`/);
   assert.match(appSettingsMigration, /CREATE TABLE `app_settings`/);
   assert.match(dashboard, /Import my data/);
@@ -204,6 +208,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Save \$\{interval\.savingsPercent\}%/);
   assert.match(dashboard, /Change billing frequency/);
   assert.match(dashboard, /Activate with Stripe/);
+  assert.match(dashboard, /CURRENT SUBSCRIPTION/);
+  assert.match(dashboard, /Stripe subscription confirmed/);
   assert.match(dashboard, /Your \$\{planName\(currentPlan\)\} plan includes up to/);
   assert.match(dashboard, /Unlimited application tracking/);
   assert.match(dashboard, /Unlimited Master CVs/);

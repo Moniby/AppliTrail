@@ -5,13 +5,22 @@ import {
   resumeSubscription,
   scheduleSubscriptionCancellation,
 } from "../../../db/appliflow-store";
-import { createStripeCheckout, createStripePortal } from "../../../db/stripe-billing";
+import { createStripeCheckout, createStripePortal, reconcileStripeCheckout, syncStripeBilling } from "../../../db/stripe-billing";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 export async function GET(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
+    if (paymentMode() === "stripe") {
+      try {
+        await syncStripeBilling(identity);
+      } catch (error) {
+        console.warn("AppliTrail Stripe status sync was unavailable", {
+          message: error instanceof Error ? error.message : "Unknown Stripe sync error",
+        });
+      }
+    }
     return Response.json(await getBillingSummary(identity));
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Billing information is unavailable." }, { status: 500 });
@@ -23,10 +32,11 @@ export async function POST(request: Request) {
   if (!identity) return authenticationRequired();
   try {
     const payload = await request.json() as {
-      action?: "checkout" | "cancel" | "resume" | "portal";
+      action?: "checkout" | "cancel" | "resume" | "portal" | "reconcile";
       productId?: string;
       quantity?: number;
       requestId?: string;
+      sessionId?: string;
     };
     const requestId = String(payload.requestId || "");
     if (payload.action === "checkout") {
@@ -38,6 +48,11 @@ export async function POST(request: Request) {
     }
     if (payload.action === "portal") {
       return Response.json(await createStripePortal(identity, new URL(request.url).origin));
+    }
+    if (payload.action === "reconcile") {
+      if (paymentMode() !== "stripe") throw new Error("Stripe checkout reconciliation is disabled for this deployment.");
+      await reconcileStripeCheckout(identity, String(payload.sessionId || ""));
+      return Response.json(await getBillingSummary(identity));
     }
     if (payload.action === "cancel") {
       if (paymentMode() === "stripe") return Response.json(await createStripePortal(identity, new URL(request.url).origin));

@@ -6,6 +6,7 @@ import {
   getAppSetting,
   getStripeLinkage,
   paymentMode,
+  processStripeWebhookEvent,
   saveAppSetting,
   saveStripeCustomer,
   subscriptionProduct,
@@ -70,6 +71,87 @@ async function stripeRetrieve(path: string) {
   const body = await response.json().catch(() => ({})) as StripeResponse & { error?: { message?: string } };
   if (!response.ok) throw new Error(body.error?.message || "Stripe could not complete this request.");
   return body;
+}
+
+function stripeObjectId(value: unknown) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "id" in value) {
+    return String((value as { id?: unknown }).id ?? "");
+  }
+  return "";
+}
+
+function checkoutUserId(session: StripeResponse) {
+  const metadata = session.metadata && typeof session.metadata === "object"
+    ? session.metadata as Record<string, unknown> : {};
+  return String(metadata.user_id ?? session.client_reference_id ?? "").trim();
+}
+
+function subscriptionSyncMarker(subscription: StripeResponse) {
+  const items = subscription.items && typeof subscription.items === "object"
+    ? (subscription.items as { data?: Array<Record<string, unknown>> }).data : undefined;
+  const firstItem = items?.[0];
+  return [
+    stripeObjectId(subscription.id),
+    String(subscription.status ?? "unknown"),
+    subscription.cancel_at_period_end === true ? "canceling" : "renewing",
+    String(subscription.current_period_end ?? firstItem?.current_period_end ?? "no-period"),
+    stripeObjectId(firstItem?.price),
+  ].join("_").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 220);
+}
+
+async function reconcileStripeSession(identity: Identity, session: StripeResponse) {
+  const sessionId = stripeObjectId(session.id);
+  if (!sessionId.startsWith("cs_")) throw new Error("Stripe returned an invalid checkout session.");
+  if (checkoutUserId(session) !== identity.userId) {
+    throw new Error("This Stripe checkout does not belong to the signed-in AppliTrail account.");
+  }
+  if (String(session.status ?? "") !== "complete"
+      || !["paid", "no_payment_required"].includes(String(session.payment_status ?? ""))) {
+    throw new Error("Stripe has not confirmed this checkout as paid.");
+  }
+  await processStripeWebhookEvent({
+    id: `reconcile_checkout_${sessionId}`,
+    type: "checkout.session.completed",
+    data: { object: session },
+  });
+  const subscriptionId = stripeObjectId(session.subscription);
+  if (!subscriptionId.startsWith("sub_")) return;
+  const subscription = session.subscription && typeof session.subscription === "object"
+    ? session.subscription as StripeResponse
+    : await stripeRetrieve(`/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  await processStripeWebhookEvent({
+    id: `reconcile_subscription_${subscriptionSyncMarker(subscription)}`,
+    type: "customer.subscription.updated",
+    data: { object: subscription },
+  });
+}
+
+export async function reconcileStripeCheckout(identity: Identity, sessionId: string) {
+  const cleaned = sessionId.trim();
+  if (!/^cs_[A-Za-z0-9_]+$/.test(cleaned)) throw new Error("The Stripe checkout reference is invalid.");
+  const session = await stripeRetrieve(`/checkout/sessions/${encodeURIComponent(cleaned)}?expand%5B%5D=subscription`);
+  await reconcileStripeSession(identity, session);
+}
+
+export async function syncStripeBilling(identity: Identity) {
+  const linkage = await getStripeLinkage(identity);
+  if (isStripeSubscriptionId(linkage.subscriptionId)) {
+    const subscription = await stripeRetrieve(`/subscriptions/${encodeURIComponent(linkage.subscriptionId)}`);
+    await processStripeWebhookEvent({
+      id: `sync_subscription_${subscriptionSyncMarker(subscription)}`,
+      type: "customer.subscription.updated",
+      data: { object: subscription },
+    });
+    return;
+  }
+  if (!isStripeCustomerId(linkage.customerId)) return;
+  const sessions = await stripeRetrieve(`/checkout/sessions?customer=${encodeURIComponent(linkage.customerId)}&status=complete&limit=10`);
+  const latest = sessions.data && Array.isArray(sessions.data)
+    ? sessions.data.find((session) => session && typeof session === "object"
+        && String((session as StripeResponse).mode ?? "") === "subscription")
+    : null;
+  if (latest && typeof latest === "object") await reconcileStripeSession(identity, latest as StripeResponse);
 }
 
 function priceEnvironmentName(productId: string) {
