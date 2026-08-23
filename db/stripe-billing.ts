@@ -375,6 +375,8 @@ export async function createStripeCheckout(
     success_url: `${origin}/app?billing=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/app?billing=cancelled`,
     billing_address_collection: "auto",
+    locale: "auto",
+    "adaptive_pricing[enabled]": "true",
     ...metadata,
   };
   if (subscription) {

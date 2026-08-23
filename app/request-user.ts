@@ -22,7 +22,7 @@ export function requestUser(request: Request): Identity | null {
 
 export function authenticationRequired() {
   return Response.json(
-    { error: "Sign in with ChatGPT to continue.", signInUrl: "/signin-with-chatgpt?return_to=%2Fapp" },
+    { error: "Sign in with Google, ChatGPT or email to continue.", signInUrl: "/signin?return_to=%2Fapp" },
     { status: 401 },
   );
 }

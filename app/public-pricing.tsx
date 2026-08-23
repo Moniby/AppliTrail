@@ -77,7 +77,7 @@ export default function PublicPricing({ ctaHref, signedIn }: { ctaHref: string; 
 
   return <section id="pricing" className="landing-pricing">
     <div className="pricing-section-head">
-      <div><p className="eyebrow">SIMPLE PRICING · CAD</p><h2>Choose a plan for your application pace.</h2><p>Compare every feature, then choose how often you want to pay. Included AI generations refresh monthly on every billing option.</p></div>
+      <div><p className="eyebrow">SIMPLE PRICING · CAD BASE · LOCAL CHECKOUT</p><h2>Choose a plan for your application pace.</h2><p>Compare every feature, then choose how often you want to pay. Included AI generations refresh monthly on every billing option.</p></div>
       <label className="billing-frequency-select"><span>Billing frequency</span><select value={selectedInterval} onChange={(event) => setSelectedInterval(event.target.value as IntervalId)} aria-label="Billing frequency">{intervals.map((option) => <option value={option.id} key={option.id}>{option.label}{option.id === "monthly" ? "" : ` · ${option.saving}`}</option>)}</select></label>
     </div>
     <div className="landing-pricing-grid pricing-comparison-grid">
@@ -99,6 +99,7 @@ export default function PublicPricing({ ctaHref, signedIn }: { ctaHref: string; 
       })}
     </div>
     <p className="landing-billing-note">Longer plans are paid upfront. Included AI generations refresh monthly and do not roll over.</p>
+    <p className="landing-local-pricing"><strong>Paying outside Canada?</strong> These cards show the Canadian-dollar base price. At checkout, Stripe automatically detects the customer’s location and, where supported, shows the exact amount in their local currency before payment.</p>
     <p className="landing-credit-note">Basic and Standard members can buy additional AI credits for $1.50 CAD each. Extra-credit purchases are not available on the Free plan. Prices exclude applicable taxes. Stripe checkout is currently in test mode, so no real payment is collected.</p>
   </section>;
 }

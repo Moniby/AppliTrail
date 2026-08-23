@@ -1,4 +1,4 @@
-import { chatGPTSignInPath, getChatGPTUser } from "./chatgpt-auth";
+import { getChatGPTUser } from "./chatgpt-auth";
 import PublicPricing from "./public-pricing";
 
 export const dynamic = "force-dynamic";
@@ -48,15 +48,23 @@ const frequentlyAskedQuestions = [
     question: "Is my job-search information private?",
     answer: "Your applications, Master CVs, uploaded resumes and generated materials are separated by signed-in account. You can export your account data or request deletion from the Account page.",
   },
+  {
+    question: "Can I sign in with Google?",
+    answer: "Yes. Choose Continue with Google on the AppliTrail sign-in page, then select Google on the secure account screen. On the current hosted version, Google identity is handled by the ChatGPT account gateway, so AppliTrail never receives your Google password.",
+  },
+  {
+    question: "Can I pay from outside Canada or in my local currency?",
+    answer: "Yes, where Stripe supports the customer’s country and currency. AppliTrail shows its base prices in Canadian dollars, and Stripe Adaptive Pricing can show and collect the exact converted amount in a supported local currency before payment. Taxes and available payment methods depend on location.",
+  },
 ] as const;
 
 export default async function LandingPage() {
   const user = await getChatGPTUser();
   return <main className="landing-page">
-    <nav className="landing-nav"><a className="landing-brand" href="/"><span>A</span>AppliTrail</a><div><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a>{user?<a className="landing-signin" href="/app">Open dashboard</a>:<a className="landing-signin" href={chatGPTSignInPath("/app")}>Sign in with ChatGPT</a>}</div></nav>
-    <section className="landing-hero"><div><p className="eyebrow">YOUR PRIVATE APPLICATION STUDIO</p><h1>Move every job application forward with confidence.</h1><p>Track opportunities, tailor evidence-based CVs and cover letters, and prepare for recruiter calls and interviews—all in one secure workspace.</p><div className="landing-actions">{user?<a className="landing-primary" href="/app">Continue to your dashboard</a>:<a className="landing-primary" href={chatGPTSignInPath("/app")}>Create your AppliTrail account</a>}<a href="#how-it-works">See how it works</a></div><small>Start free with 2 AI generations each month. No card required.</small></div><aside className="landing-preview"><span>APPLICATION PIPELINE</span><strong>One place for every next step.</strong><div><i>01</i><p><b>Save the opportunity</b>Keep the role, company, dates and job description together.</p></div><div><i>02</i><p><b>Choose your Master CV</b>Use the right evidence profile for each application.</p></div><div><i>03</i><p><b>Prepare with AI</b>Create truthful tailored materials and interview preparation.</p></div></aside></section>
+    <nav className="landing-nav"><a className="landing-brand" href="/"><span>A</span>AppliTrail</a><div><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a>{user?<a className="landing-signin" href="/app">Open dashboard</a>:<a className="landing-signin" href="/signin">Sign in</a>}</div></nav>
+    <section className="landing-hero"><div><p className="eyebrow">YOUR PRIVATE APPLICATION STUDIO</p><h1>Move every job application forward with confidence.</h1><p>Track opportunities, tailor evidence-based CVs and cover letters, and prepare for recruiter calls and interviews—all in one secure workspace.</p><div className="landing-actions">{user?<a className="landing-primary" href="/app">Continue to your dashboard</a>:<a className="landing-primary" href="/signin">Create your AppliTrail account</a>}<a href="#how-it-works">See how it works</a></div><small>Google sign-in available. Start free with 2 AI generations each month.</small></div><aside className="landing-preview"><span>APPLICATION PIPELINE</span><strong>One place for every next step.</strong><div><i>01</i><p><b>Save the opportunity</b>Keep the role, company, dates and job description together.</p></div><div><i>02</i><p><b>Choose your Master CV</b>Use the right evidence profile for each application.</p></div><div><i>03</i><p><b>Prepare with AI</b>Create truthful tailored materials and interview preparation.</p></div></aside></section>
     <section id="how-it-works" className="landing-features"><article><span>Private by design</span><h2>Your applications belong only to your account.</h2><p>Each user’s applications, Master CVs, generated materials and uploaded resumes are stored separately.</p></article><article><span>Built for evidence</span><h2>Tailoring that protects the truth.</h2><p>AppliTrail highlights supported experience, identifies gaps and asks for confirmation instead of inventing qualifications.</p></article><article><span>Ready for every stage</span><h2>From application to interview.</h2><p>Keep dates, time zones, phone briefs, interview practice and outcomes alongside the original job description.</p></article></section>
-    <PublicPricing ctaHref={user ? "/app" : chatGPTSignInPath("/app")} signedIn={Boolean(user)} />
+    <PublicPricing ctaHref={user ? "/app" : "/signin"} signedIn={Boolean(user)} />
     <section id="faq" className="landing-faq"><div className="landing-faq-heading"><p className="eyebrow">FREQUENTLY ASKED QUESTIONS</p><h2>Know exactly how AppliTrail works.</h2><p>Plans, credits, renewals and your saved job-search information—explained clearly.</p></div><div className="landing-faq-list">{frequentlyAskedQuestions.map((item)=><details key={item.question}><summary>{item.question}<span aria-hidden="true">＋</span></summary><p>{item.answer}</p></details>)}</div></section>
     <footer className="landing-footer"><span>© {new Date().getFullYear()} AppliTrail</span><div><a href="#faq">FAQ</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div></footer>
   </main>;

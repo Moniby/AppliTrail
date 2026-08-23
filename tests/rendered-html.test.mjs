@@ -20,7 +20,7 @@ test("server-renders the public AppliTrail launch page", async () => {
   const html = await response.text();
   assert.match(html, /<title>AppliTrail \| Job Application Studio<\/title>/i);
   assert.match(html, /Move every job application forward with confidence/i);
-  assert.match(html, /Sign in with ChatGPT/i);
+  assert.match(html, /Google sign-in available/i);
   assert.match(html, /Private by design/i);
   assert.match(html, /Professional Word and PDF CV formats/i);
   assert.match(html, /Track up to 3 applications/i);
@@ -43,7 +43,7 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
   const landingSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(landingSource, /from "next\/link"/);
   assert.match(landingSource, /<a className="landing-signin" href="\/app">Open dashboard<\/a>/);
-  assert.match(landingSource, /chatGPTSignInPath\("\/app"\)/);
+  assert.match(landingSource, /href="\/signin"/);
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
@@ -134,6 +134,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stripeWebhookRoute, /processStripeWebhookEvent/);
   assert.match(stripeBilling, /2026-02-25\.clover/);
   assert.match(stripeBilling, /mode: isCreditPurchase \? "payment" : "subscription"/);
+  assert.match(stripeBilling, /adaptive_pricing\[enabled\]/);
+  assert.match(stripeBilling, /locale: "auto"/);
   assert.match(stripeBilling, /subscription_data\[metadata\]\[user_id\]/);
   assert.match(stripeBilling, /billing_portal\/sessions/);
   assert.match(stripeBilling, /billing_portal\/configurations/);
@@ -207,6 +209,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Buy credits/);
   assert.match(dashboard, /Available on paid plans/);
   assert.match(publicPricing, /Extra-credit purchases are not available on the Free plan/);
+  assert.match(publicPricing, /Stripe automatically detects the customer’s location/);
   assert.match(dashboard, /BILLING FREQUENCY/);
   assert.match(dashboard, /billing-frequency-select/);
   assert.match(dashboard, /planTermBadge/);
