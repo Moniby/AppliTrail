@@ -32,7 +32,7 @@ export default async function SignInPage() {
       </div>
       <p className="signin-legal">By continuing, you can review and accept the <a href="/terms">Terms of Use</a> and <a href="/privacy">Privacy Notice</a> before saving career information.</p>
     </section>
-    <aside className="signin-benefits">
+    <section className="signin-benefits">
       <p className="eyebrow">YOUR ACCOUNT TRAVELS WITH YOU</p>
       <h2>One private workspace across devices and countries.</h2>
       <ul>
@@ -41,6 +41,6 @@ export default async function SignInPage() {
         <li><span>✓</span><div><strong>Your data remains separated</strong><p>Every user sees only the career information stored in their account.</p></div></li>
       </ul>
       <a href="/">← Back to AppliTrail</a>
-    </aside>
+    </section>
   </main>;
 }
