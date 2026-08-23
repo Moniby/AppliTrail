@@ -5,14 +5,13 @@ import {
   resumeSubscription,
   scheduleSubscriptionCancellation,
 } from "../../../db/appliflow-store";
-import { createStripeCheckout, createStripePortal, ensureStripePortalConfiguration } from "../../../db/stripe-billing";
+import { createStripeCheckout, createStripePortal } from "../../../db/stripe-billing";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 export async function GET(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
-    if (paymentMode() === "stripe") await ensureStripePortalConfiguration();
     return Response.json(await getBillingSummary(identity));
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Billing information is unavailable." }, { status: 500 });
@@ -51,6 +50,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Choose a valid billing action." }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The billing request could not be completed.";
+    console.error("AppliTrail billing request failed", { message });
     const status = /invalid|choose|disabled|configured|hold up to|manage subscription|billing profile/i.test(message) ? 400 : 500;
     return Response.json({ error: message }, { status });
   }

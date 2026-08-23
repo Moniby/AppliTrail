@@ -571,13 +571,19 @@ export async function getBillingTransactions(userId: string, limit = 100) {
 
 export async function getBillingSummary(identity: Identity) {
   const account = await ensureUser(identity);
-  const [usage, transactions] = await Promise.all([
+  const [usage, transactions, linkage] = await Promise.all([
     getUsageSummary(identity.userId),
     getBillingTransactions(identity.userId),
+    getD1().prepare("SELECT payment_subscription_id FROM users WHERE id = ?")
+      .bind(identity.userId).first<Record<string, unknown>>(),
   ]);
+  const paymentSubscriptionId = linkage?.payment_subscription_id
+    ? String(linkage.payment_subscription_id) : "";
   return {
     mode: paymentMode(),
     stripeEnvironment: process.env.STRIPE_ENVIRONMENT === "live" ? "live" : "test",
+    billingProvider: paymentSubscriptionId.startsWith("sub_") ? "stripe"
+      : paymentSubscriptionId.startsWith("demo_") ? "demo" : "none",
     account,
     usage,
     transactions,

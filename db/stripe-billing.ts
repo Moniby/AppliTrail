@@ -19,6 +19,14 @@ function stripeSecretKey() {
   return key;
 }
 
+function isStripeCustomerId(value: string | null): value is string {
+  return Boolean(value?.startsWith("cus_"));
+}
+
+function isStripeSubscriptionId(value: string | null): value is string {
+  return Boolean(value?.startsWith("sub_"));
+}
+
 function cleanRequestId(requestId: string) {
   const cleaned = requestId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 100);
   if (cleaned.length < 8) throw new Error("The checkout request is invalid. Refresh and try again.");
@@ -65,7 +73,7 @@ function stripePriceId(productId: string) {
 
 async function ensureStripeCustomer(identity: Identity) {
   const linkage = await getStripeLinkage(identity);
-  if (linkage.customerId) return { ...linkage, customerId: linkage.customerId };
+  if (isStripeCustomerId(linkage.customerId)) return { ...linkage, customerId: linkage.customerId };
   const customer = await stripeRequest("/customers", {
     email: identity.email,
     name: identity.displayName,
@@ -90,7 +98,7 @@ export async function createStripeCheckout(
   const isCreditPurchase = productId === "extra_credits";
   const subscription = subscriptionProduct(productId);
   if (!isCreditPurchase && !subscription) throw new Error("Choose a valid AppliTrail plan or credit purchase.");
-  if (subscription && linkage.account.plan !== "free" && linkage.subscriptionId) {
+  if (subscription && linkage.account.plan !== "free" && isStripeSubscriptionId(linkage.subscriptionId)) {
     throw new Error("Use Manage subscription to change an active Stripe plan.");
   }
   const safeQuantity = isCreditPurchase ? Math.max(1, Math.min(100, Math.round(quantity))) : 1;
@@ -141,7 +149,9 @@ export async function createStripeCheckout(
 export async function createStripePortal(identity: Identity, origin: string) {
   if (paymentMode() !== "stripe") throw new Error("Stripe billing management is disabled for this deployment.");
   const linkage = await getStripeLinkage(identity);
-  if (!linkage.customerId) throw new Error("No Stripe billing profile exists for this account yet.");
+  if (!isStripeCustomerId(linkage.customerId)) {
+    throw new Error("Complete a Stripe checkout before managing this subscription.");
+  }
   const configurationId = await ensureStripePortalConfiguration();
   const session = await stripeRequest("/billing_portal/sessions", {
     customer: linkage.customerId,
