@@ -1,9 +1,11 @@
 import {
   completeDemoCheckout,
   getBillingSummary,
+  paymentMode,
   resumeSubscription,
   scheduleSubscriptionCancellation,
 } from "../../../db/appliflow-store";
+import { createStripeCheckout, createStripePortal } from "../../../db/stripe-billing";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 export async function GET(request: Request) {
@@ -21,25 +23,34 @@ export async function POST(request: Request) {
   if (!identity) return authenticationRequired();
   try {
     const payload = await request.json() as {
-      action?: "checkout" | "cancel" | "resume";
+      action?: "checkout" | "cancel" | "resume" | "portal";
       productId?: string;
       quantity?: number;
       requestId?: string;
     };
     const requestId = String(payload.requestId || "");
     if (payload.action === "checkout") {
+      if (paymentMode() === "stripe") {
+        return Response.json(await createStripeCheckout(identity, String(payload.productId || ""),
+          Number(payload.quantity) || 1, requestId, new URL(request.url).origin));
+      }
       return Response.json(await completeDemoCheckout(identity, String(payload.productId || ""), Number(payload.quantity) || 1, requestId));
     }
+    if (payload.action === "portal") {
+      return Response.json(await createStripePortal(identity, new URL(request.url).origin));
+    }
     if (payload.action === "cancel") {
+      if (paymentMode() === "stripe") return Response.json(await createStripePortal(identity, new URL(request.url).origin));
       return Response.json(await scheduleSubscriptionCancellation(identity, requestId));
     }
     if (payload.action === "resume") {
+      if (paymentMode() === "stripe") return Response.json(await createStripePortal(identity, new URL(request.url).origin));
       return Response.json(await resumeSubscription(identity, requestId));
     }
     return Response.json({ error: "Choose a valid billing action." }, { status: 400 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The sandbox checkout could not be completed.";
-    const status = /invalid|choose|disabled|configured|hold up to/i.test(message) ? 400 : 500;
+    const message = error instanceof Error ? error.message : "The billing request could not be completed.";
+    const status = /invalid|choose|disabled|configured|hold up to|manage subscription|billing profile/i.test(message) ? 400 : 500;
     return Response.json({ error: message }, { status });
   }
 }

@@ -36,7 +36,7 @@ function billingIntervalDetails(interval: BillingInterval) {
   return BILLING_INTERVALS.find((option) => option.id === interval) ?? BILLING_INTERVALS[0];
 }
 
-function subscriptionProduct(productId: string) {
+export function subscriptionProduct(productId: string) {
   for (const plan of ["basic", "standard"] as const) {
     for (const interval of BILLING_INTERVALS) {
       if (productId === `${plan}_${interval.id}`) {
@@ -68,7 +68,7 @@ export type AccountRecord = Identity & {
   accountStatus: "active" | "suspended";
   termsAcceptedAt: string | null;
   privacyAcceptedAt: string | null;
-  subscriptionStatus: "active" | "canceling" | "free";
+  subscriptionStatus: "active" | "canceling" | "past_due" | "free";
   billingInterval: BillingInterval;
   billingPeriodStart: string | null;
   billingPeriodEnd: string | null;
@@ -192,11 +192,20 @@ export async function ensureSchema() {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )`),
+      db.prepare(`CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+        event_id TEXT PRIMARY KEY NOT NULL,
+        event_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'processing',
+        last_error TEXT,
+        received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        processed_at TEXT
+      )`),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage(user_id, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_status_created ON ai_usage(status, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_login_events_user_created ON login_events(user_id, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_billing_transactions_user_created ON billing_transactions(user_id, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_billing_transactions_status_created ON billing_transactions(status, created_at)"),
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_stripe_webhook_status_received ON stripe_webhook_events(status, received_at)"),
     ]);
     const userColumns = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
     const missingUserColumns = [
@@ -303,7 +312,7 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
     accountStatus: row.account_status === "suspended" ? "suspended" : "active",
     termsAcceptedAt: row.terms_accepted_at ? String(row.terms_accepted_at) : null,
     privacyAcceptedAt: row.privacy_accepted_at ? String(row.privacy_accepted_at) : null,
-    subscriptionStatus: rawPlan === "free" ? "free" : Number(row.cancel_at_period_end) === 1 ? "canceling" : "active",
+    subscriptionStatus: rawPlan === "free" ? "free" : Number(row.cancel_at_period_end) === 1 ? "canceling" : row.subscription_status === "past_due" ? "past_due" : "active",
     billingInterval,
     billingPeriodStart: row.billing_period_start ? databaseTimestamp(row.billing_period_start) : null,
     billingPeriodEnd: periodEnd,
@@ -571,6 +580,241 @@ export async function getBillingSummary(identity: Identity) {
     extraCreditPriceCents: EXTRA_CREDIT_PRICE_CENTS,
     sandboxCreditLimit: 20,
   };
+}
+
+export async function getStripeLinkage(identity: Identity) {
+  const account = await ensureUser(identity);
+  const row = await getD1().prepare(`SELECT payment_customer_id, payment_subscription_id
+      FROM users WHERE id = ?`).bind(identity.userId).first<Record<string, unknown>>();
+  return {
+    account,
+    customerId: row?.payment_customer_id ? String(row.payment_customer_id) : null,
+    subscriptionId: row?.payment_subscription_id ? String(row.payment_subscription_id) : null,
+  };
+}
+
+export async function saveStripeCustomer(userId: string, customerId: string) {
+  await ensureSchema();
+  await getD1().prepare(`UPDATE users SET payment_customer_id = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`).bind(customerId, userId).run();
+}
+
+type StripeWebhookEvent = {
+  id: string;
+  type: string;
+  data?: { object?: Record<string, unknown> };
+};
+
+function stripeString(value: unknown) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "id" in value) return String((value as { id: unknown }).id ?? "");
+  return "";
+}
+
+function stripeMetadata(object: Record<string, unknown>) {
+  return object.metadata && typeof object.metadata === "object"
+    ? object.metadata as Record<string, unknown>
+    : {};
+}
+
+function stripeDate(value: unknown) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1_000).toISOString() : null;
+}
+
+function stripePeriod(object: Record<string, unknown>) {
+  const items = object.items && typeof object.items === "object"
+    ? (object.items as { data?: Array<Record<string, unknown>> }).data
+    : undefined;
+  const firstItem = items?.[0];
+  return {
+    start: stripeDate(object.current_period_start ?? firstItem?.current_period_start),
+    end: stripeDate(object.current_period_end ?? firstItem?.current_period_end),
+  };
+}
+
+function stripeSubscriptionProductId(object: Record<string, unknown>) {
+  const items = object.items && typeof object.items === "object"
+    ? (object.items as { data?: Array<Record<string, unknown>> }).data
+    : undefined;
+  const firstItem = items?.[0];
+  const pricing = firstItem?.pricing && typeof firstItem.pricing === "object"
+    ? firstItem.pricing as { price_details?: { price?: unknown } }
+    : undefined;
+  const priceId = stripeString(firstItem?.price) || stripeString(pricing?.price_details?.price);
+  const priceEnvironmentNames: Record<string, string> = {
+    basic_monthly: "STRIPE_PRICE_BASIC_MONTHLY",
+    basic_quarterly: "STRIPE_PRICE_BASIC_QUARTERLY",
+    basic_six_month: "STRIPE_PRICE_BASIC_SIX_MONTH",
+    basic_annual: "STRIPE_PRICE_BASIC_ANNUAL",
+    standard_monthly: "STRIPE_PRICE_STANDARD_MONTHLY",
+    standard_quarterly: "STRIPE_PRICE_STANDARD_QUARTERLY",
+    standard_six_month: "STRIPE_PRICE_STANDARD_SIX_MONTH",
+    standard_annual: "STRIPE_PRICE_STANDARD_ANNUAL",
+  };
+  if (priceId) {
+    const match = Object.entries(priceEnvironmentNames)
+      .find(([, environmentName]) => process.env[environmentName]?.trim() === priceId);
+    if (match) return match[0];
+  }
+  return String(stripeMetadata(object).product_id ?? "");
+}
+
+async function stripeUserId(object: Record<string, unknown>) {
+  const metadata = stripeMetadata(object);
+  const direct = String(metadata.user_id ?? object.client_reference_id ?? "").trim();
+  if (direct) {
+    const exists = await getD1().prepare("SELECT id FROM users WHERE id = ?").bind(direct).first<{ id: string }>();
+    if (exists) return direct;
+  }
+  const subscriptionId = stripeString(object.subscription);
+  const customerId = stripeString(object.customer);
+  const row = await getD1().prepare(`SELECT id FROM users
+      WHERE (? != '' AND payment_subscription_id = ?) OR (? != '' AND payment_customer_id = ?)
+      LIMIT 1`).bind(subscriptionId, subscriptionId, customerId, customerId).first<{ id: string }>();
+  return row?.id ?? null;
+}
+
+async function applyStripeCheckoutSession(object: Record<string, unknown>) {
+  const userId = await stripeUserId(object);
+  if (!userId) throw new Error("Stripe checkout could not be matched to an AppliTrail account.");
+  const metadata = stripeMetadata(object);
+  const productId = String(metadata.product_id ?? "");
+  const customerId = stripeString(object.customer);
+  const subscriptionId = stripeString(object.subscription);
+  const db = getD1();
+  if (customerId) {
+    await db.prepare(`UPDATE users SET payment_customer_id = ?,
+        payment_subscription_id = CASE WHEN ? != '' THEN ? ELSE payment_subscription_id END,
+        updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .bind(customerId, subscriptionId, subscriptionId, userId).run();
+  }
+  const subscription = subscriptionProduct(productId);
+  if (subscription) {
+    if (!["paid", "no_payment_required"].includes(String(object.payment_status ?? ""))) return;
+    await db.prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = 'active',
+        billing_interval = ?, cancel_at_period_end = 0,
+        payment_customer_id = CASE WHEN ? != '' THEN ? ELSE payment_customer_id END,
+        payment_subscription_id = CASE WHEN ? != '' THEN ? ELSE payment_subscription_id END,
+        plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .bind(subscription.plan, PLAN_CATALOG[subscription.plan].allowance, subscription.interval.id,
+        customerId, customerId, subscriptionId, subscriptionId, userId).run();
+    return;
+  }
+  if (productId !== "extra_credits") return;
+  if (String(object.payment_status ?? "") !== "paid") return;
+  const quantity = Math.max(1, Math.min(100, Number(metadata.credits ?? 1) || 1));
+  const sessionId = stripeString(object.id);
+  const inserted = await db.prepare(`INSERT OR IGNORE INTO billing_transactions
+      (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
+      VALUES (?, 'stripe', ?, 'credit_purchase', 'extra_credits', NULL, ?, ?, ?, 'succeeded')`)
+    .bind(userId, `stripe:checkout:${sessionId}`, quantity, Number(object.amount_total ?? quantity * EXTRA_CREDIT_PRICE_CENTS),
+      String(object.currency ?? "cad").toUpperCase()).run();
+  if (resultChanges(inserted) > 0) {
+    await db.prepare("UPDATE users SET bonus_credits = bonus_credits + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(quantity, userId).run();
+  }
+}
+
+async function applyStripeSubscription(object: Record<string, unknown>, deleted = false) {
+  const userId = await stripeUserId(object);
+  if (!userId) throw new Error("Stripe subscription could not be matched to an AppliTrail account.");
+  const productId = stripeSubscriptionProductId(object);
+  const subscription = subscriptionProduct(productId);
+  const status = String(object.status ?? "");
+  if (deleted || status === "canceled") {
+    await getD1().prepare(`UPDATE users SET plan = 'free', monthly_allowance = ?, subscription_status = 'free',
+        billing_interval = 'monthly', billing_period_start = NULL, billing_period_end = NULL,
+        cancel_at_period_end = 0, payment_subscription_id = NULL,
+        plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .bind(PLAN_CATALOG.free.allowance, userId).run();
+    return;
+  }
+  if (!subscription) throw new Error("Stripe subscription metadata does not identify an AppliTrail plan.");
+  const period = stripePeriod(object);
+  const cancelAtPeriodEnd = object.cancel_at_period_end === true;
+  const customerId = stripeString(object.customer);
+  const subscriptionId = stripeString(object.id);
+  if (!["active", "trialing"].includes(status)) {
+    await getD1().prepare(`UPDATE users SET subscription_status = CASE WHEN plan = 'free' THEN 'free' ELSE 'past_due' END,
+        billing_period_start = COALESCE(?, billing_period_start), billing_period_end = COALESCE(?, billing_period_end),
+        payment_customer_id = CASE WHEN ? != '' THEN ? ELSE payment_customer_id END,
+        payment_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .bind(period.start, period.end, customerId, customerId, subscriptionId, userId).run();
+    return;
+  }
+  const appStatus = cancelAtPeriodEnd ? "canceling" : "active";
+  await getD1().prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = ?,
+      billing_interval = ?, billing_period_start = COALESCE(?, billing_period_start),
+      billing_period_end = COALESCE(?, billing_period_end), cancel_at_period_end = ?,
+      payment_customer_id = CASE WHEN ? != '' THEN ? ELSE payment_customer_id END,
+      payment_subscription_id = ?, plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`).bind(subscription.plan, PLAN_CATALOG[subscription.plan].allowance, appStatus,
+        subscription.interval.id, period.start, period.end, cancelAtPeriodEnd ? 1 : 0,
+        customerId, customerId, subscriptionId, userId).run();
+}
+
+async function applyStripeInvoice(object: Record<string, unknown>, paid: boolean) {
+  const userId = await stripeUserId(object);
+  if (!userId) throw new Error("Stripe invoice could not be matched to an AppliTrail account.");
+  if (!paid) {
+    await getD1().prepare(`UPDATE users SET subscription_status = 'past_due', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND plan != 'free'`).bind(userId).run();
+    return;
+  }
+  const row = await getD1().prepare("SELECT plan, billing_interval FROM users WHERE id = ?")
+    .bind(userId).first<Record<string, unknown>>();
+  const plan = isPlanId(row?.plan) ? row.plan : null;
+  const interval = isBillingInterval(row?.billing_interval) ? row.billing_interval : "monthly";
+  const invoiceId = stripeString(object.id);
+  const billingReason = String(object.billing_reason ?? "");
+  await getD1().batch([
+    getD1().prepare(`INSERT OR IGNORE INTO billing_transactions
+      (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
+      VALUES (?, 'stripe', ?, ?, ?, ?, 0, ?, ?, 'succeeded')`)
+      .bind(userId, `stripe:invoice:${invoiceId}`,
+        billingReason === "subscription_create" ? "subscription_purchase" : "subscription_renewal",
+        plan ? `${plan}_${interval}` : "subscription", plan,
+        Number(object.amount_paid ?? 0), String(object.currency ?? "cad").toUpperCase()),
+    getD1().prepare(`UPDATE users SET subscription_status = CASE WHEN cancel_at_period_end = 1 THEN 'canceling' ELSE 'active' END,
+      updated_at = CURRENT_TIMESTAMP WHERE id = ? AND plan != 'free'`).bind(userId),
+  ]);
+}
+
+export async function processStripeWebhookEvent(event: StripeWebhookEvent) {
+  await ensureSchema();
+  if (!event.id || !event.type) throw new Error("Stripe sent an invalid webhook event.");
+  const db = getD1();
+  const claimed = await db.prepare(`INSERT OR IGNORE INTO stripe_webhook_events
+      (event_id, event_type, status) VALUES (?, ?, 'processing')`).bind(event.id, event.type).run();
+  if (resultChanges(claimed) === 0) {
+    const existing = await db.prepare("SELECT status FROM stripe_webhook_events WHERE event_id = ?")
+      .bind(event.id).first<{ status: string }>();
+    if (existing?.status === "processed" || existing?.status === "processing") return { duplicate: true };
+    await db.prepare(`UPDATE stripe_webhook_events SET status = 'processing', last_error = NULL WHERE event_id = ?`)
+      .bind(event.id).run();
+  }
+  try {
+    const object = event.data?.object ?? {};
+    if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
+      await applyStripeCheckoutSession(object);
+    } else if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+      await applyStripeSubscription(object);
+    } else if (event.type === "customer.subscription.deleted") {
+      await applyStripeSubscription(object, true);
+    } else if (event.type === "invoice.paid") {
+      await applyStripeInvoice(object, true);
+    } else if (event.type === "invoice.payment_failed") {
+      await applyStripeInvoice(object, false);
+    }
+    await db.prepare(`UPDATE stripe_webhook_events SET status = 'processed', processed_at = CURRENT_TIMESTAMP,
+        last_error = NULL WHERE event_id = ?`).bind(event.id).run();
+    return { duplicate: false };
+  } catch (error) {
+    await db.prepare(`UPDATE stripe_webhook_events SET status = 'failed', last_error = ? WHERE event_id = ?`)
+      .bind((error instanceof Error ? error.message : "Webhook processing failed.").slice(0, 1_000), event.id).run();
+    throw error;
+  }
 }
 
 function safeReference(gateway: string, identity: Identity, requestId: string) {

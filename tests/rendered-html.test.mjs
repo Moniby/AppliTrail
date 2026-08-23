@@ -44,7 +44,7 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, dashboard, publicPricing, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, stripeWebhookRoute, stripeBilling, dashboard, publicPricing, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration, stripeWebhookMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
@@ -54,6 +54,8 @@ test("declares portable account, database and file-storage boundaries", async ()
     readFile(new URL("../app/api/account/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/billing/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/billing/webhook/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/stripe-billing.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/public-pricing.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/preparation-docx.ts", import.meta.url), "utf8"),
@@ -63,6 +65,7 @@ test("declares portable account, database and file-storage boundaries", async ()
     readFile(new URL("../drizzle/0003_colossal_prowler.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0004_famous_sumo.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0005_medical_stellaris.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0006_easy_whizzer.sql", import.meta.url), "utf8"),
   ]);
   const hosting = JSON.parse(hostingText);
   assert.equal(hosting.d1, "DB");
@@ -72,6 +75,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(schema, /sqliteTable\(\s*"ai_usage"/);
   assert.match(schema, /sqliteTable\(\s*"login_events"/);
   assert.match(schema, /sqliteTable\(\s*"billing_transactions"/);
+  assert.match(schema, /sqliteTable\(\s*"stripe_webhook_events"/);
   assert.match(schema, /accountStatus: text\("account_status"\)/);
   assert.match(schema, /billingInterval: text\("billing_interval"\)/);
   assert.match(stateRoute, /requestUser\(request\)/);
@@ -115,6 +119,18 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(billingIntervalMigration, /ADD `billing_interval` text DEFAULT 'monthly' NOT NULL/);
   assert.match(billingRoute, /completeDemoCheckout/);
   assert.match(billingRoute, /scheduleSubscriptionCancellation/);
+  assert.match(billingRoute, /createStripeCheckout/);
+  assert.match(billingRoute, /createStripePortal/);
+  assert.match(stripeWebhookRoute, /request\.text\(\)/);
+  assert.match(stripeWebhookRoute, /stripe-signature/);
+  assert.match(stripeWebhookRoute, /processStripeWebhookEvent/);
+  assert.match(stripeBilling, /2026-02-25\.clover/);
+  assert.match(stripeBilling, /mode: isCreditPurchase \? "payment" : "subscription"/);
+  assert.match(stripeBilling, /subscription_data\[metadata\]\[user_id\]/);
+  assert.match(stripeBilling, /billing_portal\/sessions/);
+  assert.match(stripeBilling, /crypto\.subtle\.sign\("HMAC"/);
+  assert.match(stripeBilling, /Idempotency-Key/);
+  assert.match(stripeWebhookMigration, /CREATE TABLE `stripe_webhook_events`/);
   assert.match(dashboard, /Import my data/);
   assert.match(dashboard, /Delete account data/);
   assert.match(dashboard, /Add to calendar/);

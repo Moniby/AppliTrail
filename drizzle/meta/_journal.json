@@ -43,6 +43,13 @@
       "when": 1787440409493,
       "tag": "0005_medical_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787520858798,
+      "tag": "0006_easy_whizzer",
+      "breakpoints": true
     }
   ]
 }

@@ -83,3 +83,16 @@ export const loginEvents = sqliteTable(
   },
   (table) => [index("idx_login_events_user_created").on(table.userId, table.createdAt)],
 );
+
+export const stripeWebhookEvents = sqliteTable(
+  "stripe_webhook_events",
+  {
+    eventId: text("event_id").primaryKey(),
+    eventType: text("event_type").notNull(),
+    status: text("status").notNull().default("processing"),
+    lastError: text("last_error"),
+    receivedAt: text("received_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    processedAt: text("processed_at"),
+  },
+  (table) => [index("idx_stripe_webhook_status_received").on(table.status, table.receivedAt)],
+);
