@@ -73,6 +73,7 @@ export type AccountRecord = Identity & {
   billingPeriodStart: string | null;
   billingPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  applicationCreationLocked: boolean;
 };
 
 export type UsageSummary = {
@@ -270,7 +271,9 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
   const db = getD1();
   const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance,
       bonus_credits, is_admin, account_status, terms_accepted_at, privacy_accepted_at,
-      subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end
+      subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end,
+      EXISTS(SELECT 1 FROM billing_transactions WHERE user_id = users.id
+        AND kind IN ('subscription_purchase', 'subscription_renewal') AND status = 'succeeded') AS has_paid_history
       FROM users WHERE id = ?`).bind(userId).first<Record<string, unknown>>();
   if (!row) throw new Error("AppliTrail account could not be created.");
   const rawPlan = isPlanId(row.plan) ? row.plan : "free";
@@ -322,6 +325,8 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
     billingPeriodStart: row.billing_period_start ? databaseTimestamp(row.billing_period_start) : null,
     billingPeriodEnd: periodEnd,
     cancelAtPeriodEnd: Number(row.cancel_at_period_end) === 1,
+    applicationCreationLocked: row.subscription_status === "past_due"
+      || (rawPlan === "free" && Number(row.has_paid_history) === 1),
   };
 }
 

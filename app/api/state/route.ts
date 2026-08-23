@@ -141,6 +141,9 @@ export async function PUT(request: Request) {
     if (!importingExistingData) {
       const limits = planResourceLimits(account.plan);
       const planName = account.plan === "free" ? "Free" : account.plan === "basic" ? "Basic" : "Standard";
+      if (account.applicationCreationLocked && state.apps.length > previous.apps.length) {
+        return Response.json({ error: "Your paid subscription is no longer active. All existing applications remain available, but renew Basic or Standard to add another." }, { status: 403 });
+      }
       if (limits.applications !== null && state.apps.length > limits.applications && state.apps.length > previous.apps.length) {
         return Response.json({ error: `Your ${planName} plan includes up to ${limits.applications} applications. Delete an application or upgrade to add another.` }, { status: 403 });
       }

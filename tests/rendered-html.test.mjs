@@ -34,6 +34,9 @@ test("server-renders the public AppliTrail launch page", async () => {
   assert.doesNotMatch(html, /Cancel anytime/i);
   assert.doesNotMatch(html, /Month-to-month billing/i);
   assert.match(html, /Included AI generations refresh monthly/i);
+  assert.match(html, /Frequently asked questions/i);
+  assert.match(html, /What happens if my Basic or Standard subscription is not renewed/i);
+  assert.match(html, /You cannot add another application until you renew/i);
 });
 
 test("uses direct navigation for the protected dashboard handoff", async () => {
@@ -242,6 +245,11 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /applicationLimit: 10, masterCvLimit: 5/);
   assert.match(accountStore, /applicationLimit: null, masterCvLimit: null/);
   assert.match(accountStore, /planResourceLimits/);
+  assert.match(accountStore, /applicationCreationLocked/);
+  assert.match(accountStore, /has_paid_history/);
+  assert.match(stateRoute, /All existing applications remain available, but renew Basic or Standard to add another/);
+  assert.match(dashboard, /Renew to add applications/);
+  assert.match(dashboard, /Your applications are safe/);
   assert.match(publicPricing, /Quarterly plan/);
   assert.match(publicPricing, /termBadge/);
   assert.doesNotMatch(publicPricing, /Cancel anytime/);
