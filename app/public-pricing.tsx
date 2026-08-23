@@ -99,6 +99,6 @@ export default function PublicPricing({ ctaHref, signedIn }: { ctaHref: string; 
       })}
     </div>
     <p className="landing-billing-note">Longer plans are paid upfront. Included AI generations refresh monthly and do not roll over.</p>
-    <p className="landing-credit-note">Need more? Buy additional AI credits for $1.50 CAD each. Prices exclude applicable taxes. The current public checkout is a no-charge sandbox while billing is tested.</p>
+    <p className="landing-credit-note">Need more? Buy additional AI credits for $1.50 CAD each. Prices exclude applicable taxes. Stripe checkout is currently in test mode, so no real payment is collected.</p>
   </section>;
 }

@@ -142,7 +142,7 @@ export async function createStripePortal(identity: Identity, origin: string) {
   if (paymentMode() !== "stripe") throw new Error("Stripe billing management is disabled for this deployment.");
   const linkage = await getStripeLinkage(identity);
   if (!linkage.customerId) throw new Error("No Stripe billing profile exists for this account yet.");
-  const configurationId = await stripePortalConfiguration();
+  const configurationId = await ensureStripePortalConfiguration();
   const session = await stripeRequest("/billing_portal/sessions", {
     customer: linkage.customerId,
     return_url: `${origin}/app`,
@@ -152,7 +152,7 @@ export async function createStripePortal(identity: Identity, origin: string) {
   return { portalUrl: session.url };
 }
 
-async function stripePortalConfiguration() {
+export async function ensureStripePortalConfiguration() {
   const configured = process.env.STRIPE_PORTAL_CONFIGURATION_ID?.trim();
   if (configured) return configured;
   const stored = await getAppSetting("stripe_portal_configuration_id");

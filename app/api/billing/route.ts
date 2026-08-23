@@ -5,13 +5,14 @@ import {
   resumeSubscription,
   scheduleSubscriptionCancellation,
 } from "../../../db/appliflow-store";
-import { createStripeCheckout, createStripePortal } from "../../../db/stripe-billing";
+import { createStripeCheckout, createStripePortal, ensureStripePortalConfiguration } from "../../../db/stripe-billing";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 export async function GET(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
+    if (paymentMode() === "stripe") await ensureStripePortalConfiguration();
     return Response.json(await getBillingSummary(identity));
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Billing information is unavailable." }, { status: 500 });

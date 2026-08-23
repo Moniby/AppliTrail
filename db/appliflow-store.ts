@@ -577,6 +577,7 @@ export async function getBillingSummary(identity: Identity) {
   ]);
   return {
     mode: paymentMode(),
+    stripeEnvironment: process.env.STRIPE_ENVIRONMENT === "live" ? "live" : "test",
     account,
     usage,
     transactions,
