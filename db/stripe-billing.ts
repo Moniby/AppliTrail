@@ -1,7 +1,9 @@
 import {
   type Identity,
+  getAppSetting,
   getStripeLinkage,
   paymentMode,
+  saveAppSetting,
   saveStripeCustomer,
   subscriptionProduct,
 } from "./appliflow-store";
@@ -140,14 +142,53 @@ export async function createStripePortal(identity: Identity, origin: string) {
   if (paymentMode() !== "stripe") throw new Error("Stripe billing management is disabled for this deployment.");
   const linkage = await getStripeLinkage(identity);
   if (!linkage.customerId) throw new Error("No Stripe billing profile exists for this account yet.");
-  const configurationId = process.env.STRIPE_PORTAL_CONFIGURATION_ID?.trim();
+  const configurationId = await stripePortalConfiguration();
   const session = await stripeRequest("/billing_portal/sessions", {
     customer: linkage.customerId,
     return_url: `${origin}/app`,
-    ...(configurationId ? { configuration: configurationId } : {}),
+    configuration: configurationId,
   });
   if (!session.url) throw new Error("Stripe did not return a billing portal page.");
   return { portalUrl: session.url };
+}
+
+async function stripePortalConfiguration() {
+  const configured = process.env.STRIPE_PORTAL_CONFIGURATION_ID?.trim();
+  if (configured) return configured;
+  const stored = await getAppSetting("stripe_portal_configuration_id");
+  if (stored) return stored;
+  const basicProduct = process.env.STRIPE_PRODUCT_BASIC?.trim();
+  const standardProduct = process.env.STRIPE_PRODUCT_STANDARD?.trim();
+  if (!basicProduct || !standardProduct) throw new Error("Stripe portal products are not configured yet.");
+  const basicPrices = ["basic_monthly", "basic_quarterly", "basic_six_month", "basic_annual"].map(stripePriceId);
+  const standardPrices = ["standard_monthly", "standard_quarterly", "standard_six_month", "standard_annual"].map(stripePriceId);
+  const values: Record<string, string> = {
+    "business_profile[headline]": "Manage your AppliTrail subscription",
+    "business_profile[privacy_policy_url]": "https://applitrail.com/privacy",
+    "business_profile[terms_of_service_url]": "https://applitrail.com/terms",
+    default_return_url: "https://applitrail.com/app",
+    "features[payment_method_update][enabled]": "true",
+    "features[invoice_history][enabled]": "true",
+    "features[subscription_cancel][enabled]": "true",
+    "features[subscription_cancel][mode]": "at_period_end",
+    "features[subscription_cancel][proration_behavior]": "none",
+    "features[subscription_update][enabled]": "true",
+    "features[subscription_update][default_allowed_updates][0]": "price",
+    "features[subscription_update][proration_behavior]": "create_prorations",
+    "features[subscription_update][products][0][product]": basicProduct,
+    "features[subscription_update][products][1][product]": standardProduct,
+  };
+  basicPrices.forEach((price, index) => {
+    values[`features[subscription_update][products][0][prices][${index}]`] = price;
+  });
+  standardPrices.forEach((price, index) => {
+    values[`features[subscription_update][products][1][prices][${index}]`] = price;
+  });
+  const configuration = await stripeRequest("/billing_portal/configurations", values,
+    "applitrail-customer-portal-v1");
+  if (!configuration.id) throw new Error("Stripe did not return a portal configuration.");
+  await saveAppSetting("stripe_portal_configuration_id", configuration.id);
+  return configuration.id;
 }
 
 function constantTimeEqual(left: string, right: string) {

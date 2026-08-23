@@ -44,7 +44,7 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, stripeWebhookRoute, stripeBilling, dashboard, publicPricing, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration, stripeWebhookMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, stripeWebhookRoute, stripeBilling, dashboard, publicPricing, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration, stripeWebhookMigration, appSettingsMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
@@ -66,6 +66,7 @@ test("declares portable account, database and file-storage boundaries", async ()
     readFile(new URL("../drizzle/0004_famous_sumo.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0005_medical_stellaris.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0006_easy_whizzer.sql", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0007_numerous_gorilla_man.sql", import.meta.url), "utf8"),
   ]);
   const hosting = JSON.parse(hostingText);
   assert.equal(hosting.d1, "DB");
@@ -76,6 +77,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(schema, /sqliteTable\(\s*"login_events"/);
   assert.match(schema, /sqliteTable\(\s*"billing_transactions"/);
   assert.match(schema, /sqliteTable\(\s*"stripe_webhook_events"/);
+  assert.match(schema, /sqliteTable\("app_settings"/);
   assert.match(schema, /accountStatus: text\("account_status"\)/);
   assert.match(schema, /billingInterval: text\("billing_interval"\)/);
   assert.match(stateRoute, /requestUser\(request\)/);
@@ -128,9 +130,12 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stripeBilling, /mode: isCreditPurchase \? "payment" : "subscription"/);
   assert.match(stripeBilling, /subscription_data\[metadata\]\[user_id\]/);
   assert.match(stripeBilling, /billing_portal\/sessions/);
+  assert.match(stripeBilling, /billing_portal\/configurations/);
+  assert.match(stripeBilling, /features\[subscription_update\]\[products\]/);
   assert.match(stripeBilling, /crypto\.subtle\.sign\("HMAC"/);
   assert.match(stripeBilling, /Idempotency-Key/);
   assert.match(stripeWebhookMigration, /CREATE TABLE `stripe_webhook_events`/);
+  assert.match(appSettingsMigration, /CREATE TABLE `app_settings`/);
   assert.match(dashboard, /Import my data/);
   assert.match(dashboard, /Delete account data/);
   assert.match(dashboard, /Add to calendar/);

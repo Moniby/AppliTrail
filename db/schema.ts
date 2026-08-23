@@ -96,3 +96,9 @@ export const stripeWebhookEvents = sqliteTable(
   },
   (table) => [index("idx_stripe_webhook_status_received").on(table.status, table.receivedAt)],
 );
+
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

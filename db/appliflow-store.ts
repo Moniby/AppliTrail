@@ -200,6 +200,11 @@ export async function ensureSchema() {
         received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         processed_at TEXT
       )`),
+      db.prepare(`CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_created ON ai_usage(user_id, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_status_created ON ai_usage(status, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_login_events_user_created ON login_events(user_id, created_at)"),
@@ -597,6 +602,21 @@ export async function saveStripeCustomer(userId: string, customerId: string) {
   await ensureSchema();
   await getD1().prepare(`UPDATE users SET payment_customer_id = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`).bind(customerId, userId).run();
+}
+
+export async function getAppSetting(key: string) {
+  await ensureSchema();
+  const row = await getD1().prepare("SELECT value FROM app_settings WHERE key = ?")
+    .bind(key).first<{ value: string }>();
+  return row?.value ?? null;
+}
+
+export async function saveAppSetting(key: string, value: string) {
+  await ensureSchema();
+  await getD1().prepare(`INSERT INTO app_settings (key, value, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`)
+    .bind(key, value).run();
 }
 
 type StripeWebhookEvent = {
