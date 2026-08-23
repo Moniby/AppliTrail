@@ -258,7 +258,7 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
       bonus_credits, is_admin, account_status, terms_accepted_at, privacy_accepted_at,
       subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end
       FROM users WHERE id = ?`).bind(userId).first<Record<string, unknown>>();
-  if (!row) throw new Error("applitrail account could not be created.");
+  if (!row) throw new Error("AppliTrail account could not be created.");
   const rawPlan = isPlanId(row.plan) ? row.plan : "free";
   const billingInterval = isBillingInterval(row.billing_interval) ? row.billing_interval : "monthly";
   const periodEnd = row.billing_period_end ? databaseTimestamp(row.billing_period_end) : null;
@@ -319,7 +319,7 @@ export async function getUserState(userId: string) {
   try {
     return { state: JSON.parse(row.state_json) as unknown, schemaVersion: row.schema_version, updatedAt: row.updated_at };
   } catch {
-    throw new Error("Your saved applitrail data could not be read.");
+    throw new Error("Your saved AppliTrail data could not be read.");
   }
 }
 
@@ -632,7 +632,7 @@ export async function completeDemoCheckout(identity: Identity, productId: string
     }
     return getBillingSummary(identity);
   }
-  throw new Error("Choose a valid applitrail plan or credit purchase.");
+  throw new Error("Choose a valid AppliTrail plan or credit purchase.");
 }
 
 export async function scheduleSubscriptionCancellation(identity: Identity, requestId: string) {

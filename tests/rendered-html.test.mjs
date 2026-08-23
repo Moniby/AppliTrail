@@ -13,12 +13,12 @@ async function render(path = "/") {
   );
 }
 
-test("server-renders the public applitrail launch page", async () => {
+test("server-renders the public AppliTrail launch page", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /<title>applitrail \| Job Application Studio<\/title>/i);
+  assert.match(html, /<title>AppliTrail \| Job Application Studio<\/title>/i);
   assert.match(html, /Move every job application forward with confidence/i);
   assert.match(html, /Sign in with ChatGPT/i);
   assert.match(html, /Private by design/i);
@@ -131,7 +131,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Suspend/);
   assert.match(dashboard, /Monthly limit/);
   assert.match(dashboard, /action:"allowance"/);
-  assert.match(dashboard, /applitrail does not scrape LinkedIn/);
+  assert.match(dashboard, /AppliTrail does not scrape LinkedIn/);
   assert.match(dashboard, /Export all to Excel/);
   assert.match(dashboard, /Excel application export/);
   assert.match(dashboard, /PaidFeatureGate/);

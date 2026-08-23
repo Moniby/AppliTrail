@@ -89,7 +89,7 @@ export async function createTailoredCvDocxBlob(options: TailoredCvDocumentOption
   ]);
 
   const document = new Document({
-    creator: "applitrail",
+    creator: "AppliTrail",
     title: `${parsed.name} - ${options.role} - Tailored CV`,
     description: `Tailored CV for ${options.role} at ${options.company}`,
     styles: {
@@ -209,7 +209,7 @@ export async function createTailoredCvPdfBlob(options: TailoredCvDocumentOptions
     title: `${parsed.name} - ${options.role} - Tailored CV`,
     subject: `Tailored CV for ${options.role} at ${options.company}`,
     author: parsed.name,
-    creator: "applitrail",
+    creator: "AppliTrail",
   });
 
   const ensureSpace = (height: number) => {

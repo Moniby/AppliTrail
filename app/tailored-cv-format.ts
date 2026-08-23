@@ -36,7 +36,7 @@ export const tailoredCvTemplates: Array<{
   {
     id: "blue-professional",
     name: "Format 1 - Blue Professional",
-    description: "Blue headings and rules based on your original applitrail CV.",
+    description: "Blue headings and rules based on your original AppliTrail CV.",
     atsLabel: "ATS friendly",
   },
   {
