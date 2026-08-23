@@ -90,7 +90,7 @@ const resultSchema = {
   },
 } as const;
 
-const instructions = `You are AppliFlow's expert CV writer and evidence checker.
+const instructions = `You are applitrail's expert CV writer and evidence checker.
 
 Create a complete, polished, ATS-friendly CV tailored to the supplied job description. Aim for approximately two pages in a conventional plain-text format that can be pasted into a document. Rewrite and reorder the headline, professional summary, core skills, and experience bullets to foreground the most relevant evidence.
 
@@ -158,7 +158,7 @@ function outputText(response: OpenAIResponse) {
 }
 
 function safeError(status: number, code = "") {
-  if (status === 401) return "OpenAI could not authenticate this request. The AppliFlow API key needs attention.";
+  if (status === 401) return "OpenAI could not authenticate this request. The applitrail API key needs attention.";
   if (status === 429 && code === "insufficient_quota") return "The OpenAI API project has no available credits or has reached its spending limit.";
   if (status === 429) return "The AI service is busy or rate-limited. Please wait briefly and try again.";
   if (status >= 500) return "The AI service is temporarily unavailable. Please try again.";
@@ -211,7 +211,7 @@ export async function POST(request: Request) {
   if (!generation.allowed) {
     return Response.json({
       error: generation.reason === "suspended"
-        ? "This AppliFlow account is suspended. Contact the administrator for help."
+        ? "This applitrail account is suspended. Contact the administrator for help."
         : generation.reason === "rate"
         ? "Please wait a moment before starting another AI generation."
         : "You have used your available AI credits. Open Account to upgrade your plan or add extra credits.",
@@ -282,7 +282,7 @@ export async function POST(request: Request) {
   } catch {
     await finishGeneration(generation.usageId, "failed").catch(() => undefined);
     return Response.json(
-      { error: "AppliFlow could not reach the AI service. Please try again." },
+      { error: "applitrail could not reach the AI service. Please try again." },
       { status: 502 },
     );
   }

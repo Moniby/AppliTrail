@@ -118,11 +118,11 @@ export async function GET(request: Request) {
   if (!identity) return authenticationRequired();
   try {
     const account = await ensureUser(identity);
-    if (account.accountStatus === "suspended") return Response.json({ error: "This AppliFlow account is suspended. Contact the administrator for help." }, { status: 403 });
+    if (account.accountStatus === "suspended") return Response.json({ error: "This applitrail account is suspended. Contact the administrator for help." }, { status: 403 });
     const [stored, usage, creditAudit] = await Promise.all([getUserState(identity.userId), getUsageSummary(identity.userId), getUserCreditAudit(identity.userId)]);
     return Response.json({ account, usage, creditAudit, hasState: Boolean(stored), state: stored?.state ?? null, updatedAt: stored?.updatedAt ?? null });
   } catch {
-    return Response.json({ error: "AppliFlow could not load your account data. Please refresh and try again." }, { status: 500 });
+    return Response.json({ error: "applitrail could not load your account data. Please refresh and try again." }, { status: 500 });
   }
 }
 
@@ -131,7 +131,7 @@ export async function PUT(request: Request) {
   if (!identity) return authenticationRequired();
   try {
     const account = await ensureUser(identity);
-    if (account.accountStatus === "suspended") return Response.json({ error: "This AppliFlow account is suspended. Contact the administrator for help." }, { status: 403 });
+    if (account.accountStatus === "suspended") return Response.json({ error: "This applitrail account is suspended. Contact the administrator for help." }, { status: 403 });
     const payload = await request.json() as { state?: unknown };
     const state = cleanState(payload.state);
     if (!state.masterCvs.length) return Response.json({ error: "Keep at least one Master CV in your account." }, { status: 400 });

@@ -64,9 +64,9 @@ export async function createPreparationDocxBlob({
   const documentLabel = kind === "phone" ? "Phone Screen Brief" : "Interview Preparation";
   const formattedDate = generatedAt.toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
   const document = new Document({
-    creator: "AppliFlow",
+    creator: "applitrail",
     title: `${documentLabel} - ${role} at ${company}`,
-    description: `AppliFlow ${documentLabel.toLowerCase()} for ${role} at ${company}`,
+    description: `applitrail ${documentLabel.toLowerCase()} for ${role} at ${company}`,
     styles: {
       default: {
         document: {
@@ -133,7 +133,7 @@ export async function createPreparationDocxBlob({
             children: [
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ text: `APPLIFLOW · ${documentLabel.toUpperCase()}`, bold: true, size: 18, color: "5F7188" })],
+                children: [new TextRun({ text: `applitrail · ${documentLabel.toUpperCase()}`, bold: true, size: 18, color: "5F7188" })],
               }),
             ],
           }),
@@ -144,7 +144,7 @@ export async function createPreparationDocxBlob({
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
                 children: [
-                  new TextRun({ text: "AppliFlow · Page ", size: 18, color: "748399" }),
+                  new TextRun({ text: "applitrail · Page ", size: 18, color: "748399" }),
                   new TextRun({ children: [PageNumber.CURRENT], size: 18, color: "748399" }),
                 ],
               }),

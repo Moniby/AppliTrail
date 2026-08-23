@@ -22,11 +22,11 @@ export function getDb() {
 }
 
 export function getD1() {
-  if (!bindings().DB) throw new Error("AppliFlow's database is unavailable.");
+  if (!bindings().DB) throw new Error("applitrail's database is unavailable.");
   return bindings().DB;
 }
 
 export function getResumeBucket() {
-  if (!bindings().RESUMES) throw new Error("AppliFlow's resume storage is unavailable.");
+  if (!bindings().RESUMES) throw new Error("applitrail's resume storage is unavailable.");
   return bindings().RESUMES;
 }
