@@ -9,6 +9,9 @@ const identityHeaders = {
   "oai-authenticated-user-id": "runtime-smoke-user",
   "oai-authenticated-user-email": "runtime-smoke@example.test",
 };
+const administratorEnvironment = {
+  APPLIFLOW_ADMIN_EMAIL: identityHeaders["oai-authenticated-user-email"],
+};
 
 async function availablePort() {
   return new Promise((resolve, reject) => {
@@ -91,7 +94,7 @@ await cp(join(process.cwd(), "dist", "standalone"), bundleDirectory, {
 });
 let server;
 try {
-  server = await startServer(dataDirectory, bundleDirectory);
+  server = await startServer(dataDirectory, bundleDirectory, administratorEnvironment);
   const health = await json(await fetch(`${server.origin}/api/health`));
   assert.equal(health.status, "ok");
 
@@ -137,7 +140,7 @@ try {
   const resumeId = uploaded.resume.id;
 
   await stopServer(server.child);
-  server = await startServer(dataDirectory, bundleDirectory);
+  server = await startServer(dataDirectory, bundleDirectory, administratorEnvironment);
 
   const persisted = await json(await fetch(`${server.origin}/api/state`, {
     headers: identityHeaders,
@@ -151,6 +154,22 @@ try {
   });
   assert.equal(resumedFile.ok, true);
   assert.equal(await resumedFile.text(), "%PDF-1.4\n%AppliTrail smoke test");
+
+  const searchableIdentity = {
+    "oai-authenticated-user-id": "runtime-searchable-user",
+    "oai-authenticated-user-email": "find.this.person@example.test",
+  };
+  await json(await fetch(`${server.origin}/api/state`, { headers: searchableIdentity }));
+  const searchResult = await json(await fetch(`${server.origin}/api/admin?q=find.this`, {
+    headers: identityHeaders,
+  }));
+  assert.equal(searchResult.userMatches, 1);
+  assert.equal(searchResult.users[0].email, "find.this.person@example.test");
+  const emptySearch = await json(await fetch(`${server.origin}/api/admin?q=nobody-matches-this`, {
+    headers: identityHeaders,
+  }));
+  assert.equal(emptySearch.userMatches, 0);
+  assert.deepEqual(emptySearch.users, []);
 
   await stopServer(server.child);
   server = await startServer(dataDirectory, bundleDirectory, {
@@ -167,7 +186,7 @@ try {
   });
   assert.equal(gatewayAuthenticated.ok, true);
 
-  console.log("Standalone runtime, persistence, and trusted-gateway authentication checks passed.");
+  console.log("Standalone runtime, persistence, administrator search, and trusted-gateway authentication checks passed.");
 } finally {
   if (server) await stopServer(server.child);
   await rm(temporaryRoot, { recursive: true, force: true });

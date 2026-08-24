@@ -103,6 +103,11 @@ await json(await fetch(`${origin}/api/state`, {
   headers: { ...identityHeaders, "content-type": "application/json" },
   body: JSON.stringify({ state }),
 }));
+const searchedUsers = await json(await fetch(`${origin}/api/admin?q=${encodeURIComponent(identity.slice(0, 24))}`, {
+  headers: administratorHeaders,
+}));
+assert.equal(searchedUsers.userMatches, 1);
+assert.equal(searchedUsers.users[0].id, identity);
 await json(await fetch(`${origin}/api/account`, {
   method: "POST",
   headers: { ...identityHeaders, "content-type": "application/json", "user-agent": "AppliTrail portable smoke" },
@@ -168,4 +173,4 @@ assert.equal(await resume.text(), "%PDF-1.4\n%AppliTrail portable stack");
   await rm(temporaryBackup, { recursive: true, force: true });
 }
 
-console.log("PostgreSQL, Azure Blob, restart persistence, backup, and restore checks passed.");
+console.log("PostgreSQL, Azure Blob, administrator search, restart persistence, backup, and restore checks passed.");

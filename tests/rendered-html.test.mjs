@@ -146,6 +146,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(adminRoute, /payload\.action === "role"/);
   assert.match(adminRoute, /adminUserDetail/);
   assert.match(adminRoute, /searchParams\.get\("userId"\)/);
+  assert.match(adminRoute, /searchParams\.get\("q"\)/);
   assert.match(phaseThreeMigration, /ALTER TABLE `users` ADD `account_status`/);
   assert.match(allowanceMigration, /`monthly_allowance` integer DEFAULT 5 NOT NULL/);
   assert.match(allowanceMigration, /SET `monthly_allowance` = 5/);
@@ -271,6 +272,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /adminView/);
   assert.match(dashboard, /Make admin/);
   assert.match(dashboard, /Remove admin/);
+  assert.match(dashboard, /Search by name, email or user ID/);
+  assert.match(dashboard, /No users match this search/);
   assert.match(dashboard, /roleConfirmation/);
   assert.match(dashboard, /admin-plan-meta/);
   assert.match(dashboard, /Login information/);
@@ -323,6 +326,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /CREATE TABLE IF NOT EXISTS login_events/);
   assert.match(accountStore, /adminUserDetail/);
   assert.match(accountStore, /setAdminRole/);
+  assert.match(accountStore, /LOWER\(u\.display_name\) LIKE \? ESCAPE '!'/);
+  assert.match(accountStore, /userResultLimit: 100/);
   assert.match(accountStore, /You cannot change your own administrator role/);
   assert.match(accountStore, /admin_role_granted/);
   assert.match(accountStore, /admin_role_revoked/);

@@ -1091,10 +1091,15 @@ export async function resumeSubscription(identity: Identity, requestId: string) 
   return getBillingSummary(identity);
 }
 
-export async function adminSummary(identity: Identity) {
+export async function adminSummary(identity: Identity, query = "") {
   const account = await ensureUser(identity);
   if (!account.isAdmin) throw new Error("Administrator access is required.");
   const db = getSqlDatabase();
+  const searchQuery = query.trim().slice(0, 120);
+  const searchPattern = `%${searchQuery.toLowerCase().replace(/[!%_]/g, (character) => `!${character}`)}%`;
+  const searchWhere = searchQuery
+    ? `WHERE (LOWER(u.display_name) LIKE ? ESCAPE '!' OR LOWER(u.email) LIKE ? ESCAPE '!' OR LOWER(u.id) LIKE ? ESCAPE '!')`
+    : "";
   const totals = await db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
       (SELECT COUNT(*) FROM users WHERE account_status = 'suspended') AS suspended,
@@ -1105,13 +1110,20 @@ export async function adminSummary(identity: Identity) {
       (SELECT COALESCE(SUM(amount_cents), 0) FROM billing_transactions
         WHERE status = 'succeeded' AND amount_cents > 0) AS sandbox_revenue_cents`)
     .first<{ users: number; suspended: number; paid_subscribers: number; generations: number; tokens: number; sandbox_revenue_cents: number }>();
-  const rows = await db.prepare(`SELECT u.id, u.email, u.display_name, u.plan, u.monthly_allowance,
+  const usersStatement = db.prepare(`SELECT u.id, u.email, u.display_name, u.plan, u.monthly_allowance,
       u.bonus_credits, u.is_admin, u.account_status, u.subscription_status, u.billing_interval, u.billing_period_end,
       u.cancel_at_period_end, u.created_at, u.updated_at, COUNT(a.id) AS generations,
       (SELECT COUNT(*) FROM login_events l WHERE l.user_id = u.id) AS login_count,
       (SELECT MAX(l.created_at) FROM login_events l WHERE l.user_id = u.id) AS last_login_at
       FROM users u LEFT JOIN ai_usage a ON a.user_id = u.id AND a.status = 'succeeded' AND a.kind != 'resume_extract'
-      GROUP BY u.id ORDER BY u.created_at DESC LIMIT 100`).all<Record<string, unknown>>();
+      ${searchWhere} GROUP BY u.id ORDER BY u.created_at DESC LIMIT 100`);
+  const rows = searchQuery
+    ? await usersStatement.bind(searchPattern, searchPattern, searchPattern).all<Record<string, unknown>>()
+    : await usersStatement.all<Record<string, unknown>>();
+  const matchesStatement = db.prepare(`SELECT COUNT(*) AS count FROM users u ${searchWhere}`);
+  const matches = searchQuery
+    ? await matchesStatement.bind(searchPattern, searchPattern, searchPattern).first<{ count: number }>()
+    : totals?.users === undefined ? null : { count: totals.users };
   const auditRows = await db.prepare(`SELECT a.id, a.kind, a.model, a.input_tokens, a.output_tokens,
       a.credit_source, COALESCE(a.finished_at, a.created_at) AS used_at, u.email, u.display_name
       FROM ai_usage a JOIN users u ON u.id = a.user_id
@@ -1125,6 +1137,9 @@ export async function adminSummary(identity: Identity) {
     totals: { users: Number(totals?.users ?? 0), suspended: Number(totals?.suspended ?? 0),
       paidSubscribers: Number(totals?.paid_subscribers ?? 0), generations: Number(totals?.generations ?? 0),
       tokens: Number(totals?.tokens ?? 0), sandboxRevenueCents: Number(totals?.sandbox_revenue_cents ?? 0) },
+    query: searchQuery,
+    userMatches: Number(matches?.count ?? 0),
+    userResultLimit: 100,
     users: rows.results.map((row) => ({
       id: String(row.id), email: String(row.email), displayName: String(row.display_name), plan: String(row.plan),
       monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),

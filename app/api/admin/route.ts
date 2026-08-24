@@ -5,8 +5,9 @@ export async function GET(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
-    const userId = new URL(request.url).searchParams.get("userId");
-    return Response.json(userId ? await adminUserDetail(identity, userId) : await adminSummary(identity));
+    const searchParams = new URL(request.url).searchParams;
+    const userId = searchParams.get("userId");
+    return Response.json(userId ? await adminUserDetail(identity, userId) : await adminSummary(identity, searchParams.get("q") ?? ""));
   }
   catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Administrator access is required." }, { status: 403 }); }
 }
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
-    const payload = await request.json() as { action?: "allowance" | "status" | "role"; userId?: string; monthlyAllowance?: number; status?: "active" | "suspended"; isAdmin?: boolean };
+    const payload = await request.json() as { action?: "allowance" | "status" | "role"; userId?: string; monthlyAllowance?: number; status?: "active" | "suspended"; isAdmin?: boolean; query?: string };
     if (!payload.userId) return Response.json({ error: "Choose a user." }, { status: 400 });
     if (payload.action === "status") {
       if (payload.status !== "active" && payload.status !== "suspended") return Response.json({ error: "Choose a valid account status." }, { status: 400 });
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     } else {
       return Response.json({ error: "Choose a valid administrator action." }, { status: 400 });
     }
-    return Response.json(await adminSummary(identity));
+    return Response.json(await adminSummary(identity, payload.query ?? ""));
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Administrator access is required." }, { status: 403 });
   }
