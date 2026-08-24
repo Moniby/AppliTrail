@@ -226,6 +226,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /AI generations will refresh every month/);
   assert.match(dashboard, /PAYMENT AUDIT/);
   assert.match(dashboard, /View details/);
+  assert.match(dashboard, /account\?\.isAdmin&&<button/);
+  assert.match(dashboard, /Admin dashboard/);
+  assert.match(dashboard, /view==="admin"&&account\?\.isAdmin/);
+  assert.match(dashboard, /adminView/);
   assert.match(dashboard, /Login information/);
   assert.match(dashboard, /Passwords, IP addresses/);
   assert.match(dashboard, /action:"record-login"/);
