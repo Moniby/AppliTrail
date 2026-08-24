@@ -21,6 +21,8 @@ RUN groupadd --gid 10001 applitrail \
     && useradd --uid 10001 --gid applitrail --shell /usr/sbin/nologin --create-home applitrail
 
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build --chown=applitrail:applitrail /app/dist/standalone/ ./
 RUN mkdir -p /data && chown applitrail:applitrail /data
 

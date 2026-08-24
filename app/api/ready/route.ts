@@ -10,6 +10,8 @@ export async function GET() {
         status: "ready",
         service: "applitrail",
         provider: runtime.provider,
+        database: runtime.databaseDialect,
+        storage: runtime.storageProvider,
         checkedAt: new Date().toISOString(),
       },
       { headers: { "Cache-Control": "no-store" } },

@@ -36,8 +36,8 @@ jobs:
       - name: Run cloud-ready checks
         run: npm run ci
 
-  container:
-    name: Build container
+  portable:
+    name: Verify PostgreSQL and Azure storage container
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: verify
@@ -45,16 +45,24 @@ jobs:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.14.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
-      - name: Build production image
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
-        with:
-          context: .
-          push: false
-          tags: applitrail:ci
-          build-args: |
-            APPLITRAIL_RELEASE=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Start portable stack
+        run: docker compose up --build --detach
+
+      - name: Verify database, files, and restart persistence
+        run: node scripts/smoke-portable-stack.mjs
+
+      - name: Stop portable stack
+        if: always()
+        run: docker compose down --volumes

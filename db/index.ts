@@ -11,6 +11,10 @@ export function getSqlDatabase(): SqlDatabase {
   return requireRuntime().database;
 }
 
+export function getDatabaseDialect() {
+  return requireRuntime().databaseDialect;
+}
+
 export function getResumeStorage() {
   return requireRuntime().resumeStorage;
 }

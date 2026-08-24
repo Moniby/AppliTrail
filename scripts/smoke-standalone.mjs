@@ -40,7 +40,7 @@ async function waitForReady(origin, child) {
   throw lastError ?? new Error("Standalone server did not become ready.");
 }
 
-async function startServer(dataDirectory, bundleDirectory) {
+async function startServer(dataDirectory, bundleDirectory, environment = {}) {
   const port = await availablePort();
   const child = spawn(process.execPath, [join(bundleDirectory, "server.js")], {
     cwd: bundleDirectory,
@@ -50,6 +50,7 @@ async function startServer(dataDirectory, bundleDirectory) {
       HOST: "127.0.0.1",
       PORT: String(port),
       APPLITRAIL_DATA_DIR: dataDirectory,
+      ...environment,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -151,7 +152,22 @@ try {
   assert.equal(resumedFile.ok, true);
   assert.equal(await resumedFile.text(), "%PDF-1.4\n%AppliTrail smoke test");
 
-  console.log("Standalone runtime, database, and resume persistence checks passed.");
+  await stopServer(server.child);
+  server = await startServer(dataDirectory, bundleDirectory, {
+    APPLITRAIL_AUTH_MODE: "gateway",
+    APPLITRAIL_AUTH_GATEWAY_SECRET: "runtime-smoke-gateway-secret",
+  });
+  const spoofed = await fetch(`${server.origin}/api/state`, { headers: identityHeaders });
+  assert.equal(spoofed.status, 401);
+  const gatewayAuthenticated = await fetch(`${server.origin}/api/state`, {
+    headers: {
+      ...identityHeaders,
+      "x-applitrail-auth-secret": "runtime-smoke-gateway-secret",
+    },
+  });
+  assert.equal(gatewayAuthenticated.ok, true);
+
+  console.log("Standalone runtime, persistence, and trusted-gateway authentication checks passed.");
 } finally {
   if (server) await stopServer(server.child);
   await rm(temporaryRoot, { recursive: true, force: true });

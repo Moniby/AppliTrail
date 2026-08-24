@@ -23,6 +23,7 @@ jobs:
   publish:
     name: Publish immutable image
     runs-on: ubuntu-latest
+    environment: container-release
     timeout-minutes: 30
     steps:
       - name: Check out source

@@ -1,14 +1,7 @@
-import { identityFromTrustedHeaders, type Identity } from "../platform/identity";
+import { identityFromRequestHeaders, type Identity } from "../platform/identity";
 
 export function requestUser(request: Request): Identity | null {
-  const identity = identityFromTrustedHeaders(request.headers);
-  if (!identity) {
-    if (process.env.NODE_ENV !== "production") {
-      return { userId: "appliflow-local-user", email: "local@appliflow.test", displayName: "Local User" };
-    }
-    return null;
-  }
-  return identity;
+  return identityFromRequestHeaders(request.headers);
 }
 
 export function authenticationRequired() {

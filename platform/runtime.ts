@@ -28,6 +28,8 @@ function cloudflareRuntime(
     database: database as SqlDatabase,
     resumeStorage: resumeStorage as ObjectStorage,
     provider: "cloudflare",
+    databaseDialect: "sqlite",
+    storageProvider: "cloudflare-r2",
     dataLocation: "Cloudflare D1 and R2",
   };
 }
@@ -75,6 +77,8 @@ export async function runtimeReadiness() {
   await activeRuntime.resumeStorage.list({ prefix: "__health__", limit: 1 });
   return {
     provider: activeRuntime.provider,
+    databaseDialect: activeRuntime.databaseDialect,
+    storageProvider: activeRuntime.storageProvider,
     dataLocation: activeRuntime.dataLocation,
   };
 }

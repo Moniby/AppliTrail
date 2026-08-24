@@ -56,10 +56,14 @@ export interface ObjectStorage {
 }
 
 export type RuntimeProvider = "cloudflare" | "node";
+export type DatabaseDialect = "sqlite" | "postgres";
+export type StorageProvider = "cloudflare-r2" | "filesystem" | "azure-blob";
 
 export type ApplicationRuntime = {
   database: SqlDatabase;
   resumeStorage: ObjectStorage;
   provider: RuntimeProvider;
+  databaseDialect: DatabaseDialect;
+  storageProvider: StorageProvider;
   dataLocation: string;
 };

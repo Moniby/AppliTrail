@@ -260,32 +260,72 @@ class FileObjectStorage implements ObjectStorage {
   }
 }
 
-export async function createNodeRuntime(): Promise<ApplicationRuntime> {
+async function nodeModules() {
   const sqliteName = "node:sqlite";
   const fsName = "node:fs/promises";
   const pathName = "node:path";
-  const [{ DatabaseSync }, fs, path] = await Promise.all([
+  return Promise.all([
     import(/* @vite-ignore */ sqliteName) as Promise<NodeSqlite>,
     import(/* @vite-ignore */ fsName) as Promise<NodeFs>,
     import(/* @vite-ignore */ pathName) as Promise<NodePath>,
   ]);
+}
 
-  const dataDirectory = path.resolve(
-    process.env.APPLITRAIL_DATA_DIR || path.join(process.cwd(), ".data"),
-  );
+export async function createNodeSqliteDatabase(dataDirectory: string) {
+  const [{ DatabaseSync }, fs, path] = await nodeModules();
   await fs.mkdir(dataDirectory, { recursive: true });
   const databasePath = path.join(dataDirectory, "applitrail.sqlite");
   const database = new DatabaseSync(databasePath);
   database.exec("PRAGMA foreign_keys = ON");
   database.exec("PRAGMA journal_mode = WAL");
   database.exec("PRAGMA busy_timeout = 5000");
+  return new NodeSqlDatabase(database);
+}
+
+export async function createFileObjectStorage(dataDirectory: string) {
+  const [, fs, path] = await nodeModules();
   const resumeDirectory = path.join(dataDirectory, "resumes");
   await fs.mkdir(resumeDirectory, { recursive: true });
+  return new FileObjectStorage(resumeDirectory, fs, path);
+}
+
+function configuredDatabaseProvider() {
+  const configured = process.env.APPLITRAIL_DATABASE_PROVIDER?.trim().toLowerCase();
+  if (configured === "postgres" || configured === "sqlite") return configured;
+  return process.env.DATABASE_URL?.trim() ? "postgres" : "sqlite";
+}
+
+function configuredStorageProvider() {
+  const configured = process.env.APPLITRAIL_STORAGE_PROVIDER?.trim().toLowerCase();
+  if (configured === "azure" || configured === "filesystem") return configured;
+  return process.env.AZURE_STORAGE_CONNECTION_STRING?.trim() ? "azure" : "filesystem";
+}
+
+export async function createNodeRuntime(): Promise<ApplicationRuntime> {
+  const [, fs, path] = await nodeModules();
+
+  const dataDirectory = path.resolve(
+    process.env.APPLITRAIL_DATA_DIR || path.join(process.cwd(), ".data"),
+  );
+  await fs.mkdir(dataDirectory, { recursive: true });
+
+  const databaseProvider = configuredDatabaseProvider();
+  const storageProvider = configuredStorageProvider();
+  const database = databaseProvider === "postgres"
+    ? await (await import("./runtime-postgres")).createPostgresDatabase()
+    : await createNodeSqliteDatabase(dataDirectory);
+  const resumeStorage = storageProvider === "azure"
+    ? await (await import("./runtime-azure")).createAzureBlobStorage()
+    : await createFileObjectStorage(dataDirectory);
 
   return {
-    database: new NodeSqlDatabase(database),
-    resumeStorage: new FileObjectStorage(resumeDirectory, fs, path),
+    database,
+    resumeStorage,
     provider: "node",
-    dataLocation: dataDirectory,
+    databaseDialect: databaseProvider,
+    storageProvider: storageProvider === "azure" ? "azure-blob" : "filesystem",
+    dataLocation: databaseProvider === "postgres" || storageProvider === "azure"
+      ? `${databaseProvider} database and ${storageProvider} storage`
+      : dataDirectory,
   };
 }

@@ -330,12 +330,16 @@ test("declares portable account, database and file-storage boundaries", async ()
 });
 
 test("ships a container-safe runtime and GitHub Actions release path", async () => {
-  const [database, worker, contracts, runtime, nodeRuntime, dockerfile, compose, ci, release, nextConfig, packageJson, health, readiness] = await Promise.all([
+  const [database, worker, contracts, runtime, nodeRuntime, postgresRuntime, azureRuntime, identity, backup, dockerfile, compose, ci, release, nextConfig, packageJson, health, readiness] = await Promise.all([
     readFile(new URL("../db/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../platform/contracts.ts", import.meta.url), "utf8"),
     readFile(new URL("../platform/runtime.ts", import.meta.url), "utf8"),
     readFile(new URL("../platform/runtime-node.ts", import.meta.url), "utf8"),
+    readFile(new URL("../platform/runtime-postgres.ts", import.meta.url), "utf8"),
+    readFile(new URL("../platform/runtime-azure.ts", import.meta.url), "utf8"),
+    readFile(new URL("../platform/identity.ts", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/portable-backup.mjs", import.meta.url), "utf8"),
     readFile(new URL("../Dockerfile", import.meta.url), "utf8"),
     readFile(new URL("../compose.yaml", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
@@ -356,17 +360,29 @@ test("ships a container-safe runtime and GitHub Actions release path", async () 
   assert.match(nodeRuntime, /APPLITRAIL_DATA_DIR/);
   assert.match(nodeRuntime, /journal_mode = WAL/);
   assert.match(nodeRuntime, /class FileObjectStorage/);
+  assert.match(postgresRuntime, /class PostgresDatabase/);
+  assert.match(postgresRuntime, /INSERT INTO.*ON CONFLICT DO NOTHING/s);
+  assert.match(postgresRuntime, /created_at::timestamptz/);
+  assert.match(azureRuntime, /class AzureBlobStorage/);
+  assert.match(identity, /APPLITRAIL_AUTH_GATEWAY_SECRET/);
+  assert.match(identity, /gatewayIsTrusted/);
+  assert.match(backup, /APPLITRAIL_RESTORE_CONFIRM/);
+  assert.match(backup, /databaseSha256/);
   assert.match(dockerfile, /USER applitrail/);
   assert.match(dockerfile, /VOLUME \["\/data"\]/);
   assert.match(dockerfile, /\/api\/ready/);
   assert.match(compose, /applitrail-data:\/data/);
+  assert.match(compose, /postgres:17-alpine/);
+  assert.match(compose, /azure-storage\/azurite:3\.35\.0/);
   assert.match(ci, /npm run ci/);
-  assert.match(ci, /docker\/build-push-action@f9f3042/);
+  assert.match(ci, /npm run test:portable|smoke-portable-stack/);
   assert.match(release, /ghcr\.io\/moniby\/applitrail/);
   assert.match(release, /provenance: true/);
   assert.match(release, /sbom: true/);
   assert.match(nextConfig, /output: "standalone"/);
   assert.equal(JSON.parse(packageJson).dependencies.jspdf, "^4.2.1");
+  assert.equal(JSON.parse(packageJson).dependencies.pg, "^8.23.0");
+  assert.equal(JSON.parse(packageJson).dependencies["@azure/storage-blob"], "^12.33.0");
   assert.match(health, /status: "ok"/);
   assert.match(readiness, /runtimeReadiness/);
 });

@@ -14,7 +14,8 @@ stores its database and uploaded resumes outside the image under `/data`, so a n
 application version does not erase user data.
 
 See [docs/cloud-architecture.md](docs/cloud-architecture.md) for the Azure migration
-boundary, security model, data-preservation rules, and AWS equivalents.
+boundary and [docs/portable-authentication.md](docs/portable-authentication.md) for
+the Google/email identity boundary.
 
 ## Local development
 
@@ -36,7 +37,7 @@ npm run ci
 ```
 
 This checks TypeScript, the new cloud boundaries, the production build, existing UI
-regressions, and restart persistence for both application records and uploaded CVs.
+regressions, SQLite/file fallback persistence and trusted-gateway authentication.
 
 The legacy dashboard currently has a separate lint backlog, so `lint:cloud` gates
 new infrastructure code without silently weakening the existing lint rules.
@@ -48,7 +49,9 @@ docker compose up --build
 ```
 
 Open <http://localhost:3000>. The named `applitrail-data` volume holds the SQLite
-database and resumes. Keep that volume when replacing the image.
+fallback, while the normal Compose stack uses named PostgreSQL and Azurite volumes.
+Run `npm run test:portable` to verify database, uploaded-file, restart, backup and
+restore behaviour. See [docs/operations.md](docs/operations.md) for the runbook.
 
 For a direct run:
 
@@ -62,8 +65,9 @@ or Stripe keys in a Docker build argument, image, repository, or compose file.
 
 ## GitHub Actions
 
-- `CI` runs on pull requests and pushes to `main`, verifies persistence, and builds
-  the container without publishing it.
+- `CI` runs on pull requests and pushes to `main`, verifies both persistence modes,
+  tests the trusted authentication boundary, and builds the container without
+  publishing it.
 - `Publish container` runs manually or for a `v*` tag and publishes immutable SHA
   and release tags to `ghcr.io/moniby/applitrail` with provenance and an SBOM.
 - Neither workflow deploys the application or changes the live public site.

@@ -1,4 +1,37 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: applitrail
+      POSTGRES_USER: applitrail
+      POSTGRES_PASSWORD: applitrail-local-not-for-production
+    ports:
+      - "54329:5432"
+    volumes:
+      - applitrail-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U applitrail -d applitrail"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    command: azurite-blob --blobHost 0.0.0.0 --location /data --debug /data/debug.log --skipApiVersionCheck
+    environment:
+      AZURITE_ACCOUNTS: "applitrail:YXBwbGl0cmFpbC1sb2NhbC1zdG9yYWdlLWtleS1ub3QtZm9yLXByb2R1Y3Rpb24="
+    ports:
+      - "10000:10000"
+    volumes:
+      - applitrail-azurite:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:10000/applitrail?comp=list').then(()=>process.exit(0)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
   applitrail:
     build:
       context: .
@@ -8,14 +41,27 @@ services:
     ports:
       - "3000:3000"
     environment:
+      APPLITRAIL_DATABASE_PROVIDER: postgres
+      DATABASE_URL: postgresql://applitrail:applitrail-local-not-for-production@postgres:5432/applitrail
+      APPLITRAIL_STORAGE_PROVIDER: azure
+      AZURE_STORAGE_CONNECTION_STRING: DefaultEndpointsProtocol=http;AccountName=applitrail;AccountKey=YXBwbGl0cmFpbC1sb2NhbC1zdG9yYWdlLWtleS1ub3QtZm9yLXByb2R1Y3Rpb24=;BlobEndpoint=http://azurite:10000/applitrail;
+      AZURE_STORAGE_CONTAINER: resumes
+      APPLITRAIL_AUTH_MODE: sites
       APPLIFLOW_PAYMENT_MODE: demo
-      APPLIFLOW_ADMIN_EMAIL: ${APPLIFLOW_ADMIN_EMAIL:-}
+      APPLIFLOW_ADMIN_EMAIL: ${APPLIFLOW_ADMIN_EMAIL:-portable-admin@example.test}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
     volumes:
       - applitrail-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      azurite:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   applitrail-data:
+  applitrail-postgres:
+  applitrail-azurite:
