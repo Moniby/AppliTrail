@@ -135,3 +135,6 @@
 
 /* Account page without the removed data-export card */
 .account-grid:not(.admin-dashboard-grid)>.danger-card{grid-column:1/-1;min-height:0}
+
+/* Clear unavailable-feature markers on pricing cards */
+.landing-pricing .pricing-plan .pricing-plan-features li.not-included span{color:#b33c34}

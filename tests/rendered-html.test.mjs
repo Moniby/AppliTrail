@@ -30,6 +30,12 @@ test("server-renders the public AppliTrail launch page", async () => {
   assert.match(html, /1 month plan/i);
   assert.match(html, /Quarterly plan/i);
   assert.match(html, /What’s included/i);
+  assert.match(html, /SIMPLE PRICING · LOCAL CHECKOUT/i);
+  assert.doesNotMatch(html, /CAD BASE/i);
+  assert.match(html, /Paying outside Canada[\s\S]*No worries/i);
+  assert.match(html, /Track and Remind/i);
+  assert.match(html, /Keep track of each application and set reminders when necessary/i);
+  assert.match(html, /✕/);
   assert.doesNotMatch(html, /Always free/i);
   assert.doesNotMatch(html, /Cancel anytime/i);
   assert.doesNotMatch(html, /Month-to-month billing/i);
@@ -211,7 +217,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Buy credits/);
   assert.match(dashboard, /Available on paid plans/);
   assert.match(publicPricing, /Extra-credit purchases are not available on the Free plan/);
-  assert.match(publicPricing, /Stripe automatically detects the customer’s location/);
+  assert.match(publicPricing, /At checkout, you will see the equivalent in your local currency/);
   assert.match(dashboard, /BILLING FREQUENCY/);
   assert.match(dashboard, /billing-frequency-select/);
   assert.match(dashboard, /planTermBadge/);
