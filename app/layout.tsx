@@ -6,8 +6,9 @@ export const metadata: Metadata = {
   title: "AppliTrail | Job Application Studio",
   description: "Track applications and prepare tailored career materials.",
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: "/applitrail-logo.png",
+    shortcut: "/applitrail-logo.png",
+    apple: "/applitrail-logo.png",
   },
   openGraph: {
     title: "AppliTrail | Job Application Studio",

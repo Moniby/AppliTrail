@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import AppliTrailLogo from "../applitrail-logo";
 import { chatGPTSignInPath, getChatGPTUser } from "../chatgpt-auth";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export default async function SignInPage() {
   const secureSignInPath = chatGPTSignInPath("/app");
   return <main className="signin-page">
     <section className="signin-card">
-      <a className="landing-brand" href="/"><span>A</span>AppliTrail</a>
+      <a className="landing-brand" href="/"><AppliTrailLogo />AppliTrail</a>
       <div className="signin-heading">
         <p className="eyebrow">WELCOME TO APPLITRAIL</p>
         <h1>Sign in to your career workspace.</h1>

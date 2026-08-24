@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 async function render(path = "/") {
@@ -53,6 +53,23 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
   assert.doesNotMatch(landingSource, /from "next\/link"/);
   assert.match(landingSource, /<a className="landing-signin" href="\/app">Open dashboard<\/a>/);
   assert.match(landingSource, /href="\/signin"/);
+});
+
+test("uses the approved AppliTrail logo across public and account surfaces", async () => {
+  const [landing, signIn, dashboard, layout] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/signin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    access(new URL("../public/applitrail-logo.png", import.meta.url)),
+  ]);
+  assert.match(landing, /<AppliTrailLogo \/>/);
+  assert.match(signIn, /<AppliTrailLogo \/>/);
+  assert.match(dashboard, /<AppliTrailLogo \/>/);
+  assert.match(layout, /icon: "\/applitrail-logo\.png"/);
+  assert.doesNotMatch(landing, /<span>A<\/span>AppliTrail/);
+  assert.doesNotMatch(signIn, /<span>A<\/span>AppliTrail/);
+  assert.doesNotMatch(dashboard, /className="mark">A/);
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
