@@ -67,6 +67,8 @@ test("uses the approved AppliTrail logo across public and account surfaces", asy
   assert.match(signIn, /<AppliTrailLogo \/>/);
   assert.match(dashboard, /<AppliTrailLogo \/>/);
   assert.match(layout, /icon: "\/applitrail-logo\.png"/);
+  const logoComponent = await readFile(new URL("../app/applitrail-logo.tsx", import.meta.url), "utf8");
+  assert.match(logoComponent, /<img[^>]+src="\/applitrail-logo\.png"[^>]+alt=""/);
   assert.doesNotMatch(landing, /<span>A<\/span>AppliTrail/);
   assert.doesNotMatch(signIn, /<span>A<\/span>AppliTrail/);
   assert.doesNotMatch(dashboard, /className="mark">A/);

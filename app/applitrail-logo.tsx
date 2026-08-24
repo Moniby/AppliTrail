@@ -1,3 +1,3 @@
 export default function AppliTrailLogo() {
-  return <span className="applitrail-logo" aria-hidden="true" />;
+  return <img className="applitrail-logo" src="/applitrail-logo.png" alt="" width="42" height="42" aria-hidden="true" />;
 }
