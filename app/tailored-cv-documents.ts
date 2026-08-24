@@ -59,6 +59,7 @@ function bodyParagraph(
   template: TailoredCvTemplateId,
   bullet: boolean,
   emphasis: boolean,
+  reviewAddition: boolean,
 ) {
   const blue = template === "blue-professional";
   return new Paragraph({
@@ -70,8 +71,8 @@ function bodyParagraph(
         text: safeText(text),
         font: "Arial",
         size: blue ? 20 : 21,
-        bold: emphasis,
-        color: blue ? BODY : BLACK,
+        bold: emphasis || reviewAddition,
+        color: reviewAddition ? "B42318" : blue ? BODY : BLACK,
       }),
     ],
   });
@@ -84,7 +85,7 @@ export async function createTailoredCvDocxBlob(options: TailoredCvDocumentOption
   const sections = parsed.sections.flatMap((section) => [
     sectionHeading(section.title, options.template),
     ...section.entries.map((entry) =>
-      bodyParagraph(entry.text, options.template, entry.bullet, entry.emphasis),
+      bodyParagraph(entry.text, options.template, entry.bullet, entry.emphasis, entry.reviewAddition),
     ),
   ]);
 
@@ -223,12 +224,14 @@ export async function createTailoredCvPdfBlob(options: TailoredCvDocumentOptions
     indent = 0,
     bullet = false,
     bold = false,
+    reviewAddition = false,
     after = 1.4,
   }: {
     text: string;
     indent?: number;
     bullet?: boolean;
     bold?: boolean;
+    reviewAddition?: boolean;
     after?: number;
   }) => {
     const bulletIndent = bullet ? 4 : 0;
@@ -236,7 +239,7 @@ export async function createTailoredCvPdfBlob(options: TailoredCvDocumentOptions
     ensureSpace(lines.length * bodyLine + after);
     document.setFont("helvetica", bold ? "bold" : "normal");
     document.setFontSize(bodySize);
-    document.setTextColor(blue ? 38 : 17, blue ? 52 : 17, blue ? 67 : 17);
+    document.setTextColor(reviewAddition ? 180 : blue ? 38 : 17, reviewAddition ? 35 : blue ? 52 : 17, reviewAddition ? 24 : blue ? 67 : 17);
     if (bullet) document.text("•", marginX + indent, y);
     document.text(lines, marginX + indent + bulletIndent, y);
     y += lines.length * bodyLine + after;
@@ -296,7 +299,8 @@ export async function createTailoredCvPdfBlob(options: TailoredCvDocumentOptions
       drawTextLines({
         text: entry.text,
         bullet: entry.bullet,
-        bold: entry.emphasis,
+        bold: entry.emphasis || entry.reviewAddition,
+        reviewAddition: entry.reviewAddition,
         indent: entry.bullet ? 1 : 0,
         after: entry.emphasis ? 2.1 : 1.3,
       });

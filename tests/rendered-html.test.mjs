@@ -95,7 +95,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /rejectionComment: 10_000/);
   assert.match(stateRoute, /interviewNotes: 20_000/);
   assert.match(stateRoute, /safe\.stageHistory = stageHistory\.length/);
-  assert.match(stateRoute, /schemaVersion: 7/);
+  assert.match(stateRoute, /schemaVersion: 8/);
   assert.match(stateRoute, /safe\.customTasks/);
   assert.match(stateRoute, /hasPaidPlanFeatures\(account\.plan\)/);
   assert.match(stateRoute, /planResourceLimits\(account\.plan\)/);

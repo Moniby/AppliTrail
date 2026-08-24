@@ -84,6 +84,14 @@ function cleanState(value: unknown) {
         ...(completedAt && !Number.isNaN(Date.parse(completedAt)) ? { completedAt } : {}),
       };
     }).filter((task) => task.date);
+    const rawReviewDecisions = app.tailoredCvReviewDecisions && typeof app.tailoredCvReviewDecisions === "object"
+      ? app.tailoredCvReviewDecisions as Record<string, unknown>
+      : {};
+    safe.tailoredCvReviewDecisions = Object.fromEntries(
+      Object.entries(rawReviewDecisions)
+        .filter(([key, decision]) => key.length <= 700 && (decision === "included" || decision === "excluded"))
+        .slice(0, 200),
+    );
     safe.url = safeJobUrl(app.url);
     safe.id = Number.isFinite(Number(app.id)) ? Number(app.id) : Date.now();
     safe.stage = STAGES.has(stage) ? stage : "Saved";
@@ -110,7 +118,7 @@ function cleanState(value: unknown) {
     reminderDaysBefore: Math.max(1, Math.min(30, Math.round(Number(rawPreferences.reminderDaysBefore) || 3))),
     followUpDays: Math.max(3, Math.min(60, Math.round(Number(rawPreferences.followUpDays) || 7))),
   };
-  return { schemaVersion: 7, apps, masterCvs, activeMasterCvId, preferences };
+  return { schemaVersion: 8, apps, masterCvs, activeMasterCvId, preferences };
 }
 
 export async function GET(request: Request) {

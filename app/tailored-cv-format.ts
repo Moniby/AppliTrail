@@ -13,6 +13,7 @@ export type TailoredCvEntry = {
   text: string;
   bullet: boolean;
   emphasis: boolean;
+  reviewAddition: boolean;
 };
 
 export type TailoredCvSection = {
@@ -155,12 +156,15 @@ export function parseTailoredCv(content: string, identity: TailoredCvIdentity): 
     }
 
     const bullet = rawLine.match(/^[-*•]\s+(.+)$/);
-    const text = cleanInlineFormatting(bullet ? bullet[1] : rawLine);
+    const entrySource = bullet ? bullet[1] : rawLine;
+    const reviewAddition = /^\[REVIEW\]\s*/i.test(entrySource);
+    const text = cleanInlineFormatting(entrySource.replace(/^\[REVIEW\]\s*/i, ""));
     if (!text || meaningfulHeader.includes(text)) continue;
     ensureSection().entries.push({
       text,
       bullet: Boolean(bullet),
       emphasis: !bullet && looksLikeRoleLine(text),
+      reviewAddition,
     });
   }
 
