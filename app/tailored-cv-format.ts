@@ -168,6 +168,17 @@ export function parseTailoredCv(content: string, identity: TailoredCvIdentity): 
     });
   }
 
+  const legacyReviewSection = sections.find((section) => section.title === "ADDITIONAL ROLE-RELEVANT SKILLS");
+  if (legacyReviewSection) {
+    const skillsSection = sections.find((section) => section !== legacyReviewSection && /(SKILLS?|COMPETENCIES|EXPERTISE|CAPABILITIES)/.test(section.title));
+    if (skillsSection) {
+      skillsSection.entries.push(...legacyReviewSection.entries);
+      sections.splice(sections.indexOf(legacyReviewSection), 1);
+    } else {
+      legacyReviewSection.title = "CORE SKILLS";
+    }
+  }
+
   return {
     name: name || identity.name || "Your name",
     headline: headline || identity.headline,
