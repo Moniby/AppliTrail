@@ -328,3 +328,45 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /admin_role_revoked/);
   assert.match(accountStore, /datetime\('now', '-5 minutes'\)/);
 });
+
+test("ships a container-safe runtime and GitHub Actions release path", async () => {
+  const [database, worker, contracts, runtime, nodeRuntime, dockerfile, compose, ci, release, nextConfig, packageJson, health, readiness] = await Promise.all([
+    readFile(new URL("../db/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../platform/contracts.ts", import.meta.url), "utf8"),
+    readFile(new URL("../platform/runtime.ts", import.meta.url), "utf8"),
+    readFile(new URL("../platform/runtime-node.ts", import.meta.url), "utf8"),
+    readFile(new URL("../Dockerfile", import.meta.url), "utf8"),
+    readFile(new URL("../compose.yaml", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/container-release.yml", import.meta.url), "utf8"),
+    readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/ready/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.doesNotMatch(database, /cloudflare:workers/);
+  assert.match(database, /requireRuntime\(\)\.database/);
+  assert.match(worker, /initializeRuntime/);
+  assert.match(contracts, /interface SqlDatabase/);
+  assert.match(contracts, /interface ObjectStorage/);
+  assert.match(runtime, /provider: "cloudflare"/);
+  assert.match(runtime, /createNodeRuntime/);
+  assert.match(nodeRuntime, /APPLITRAIL_DATA_DIR/);
+  assert.match(nodeRuntime, /journal_mode = WAL/);
+  assert.match(nodeRuntime, /class FileObjectStorage/);
+  assert.match(dockerfile, /USER applitrail/);
+  assert.match(dockerfile, /VOLUME \["\/data"\]/);
+  assert.match(dockerfile, /\/api\/ready/);
+  assert.match(compose, /applitrail-data:\/data/);
+  assert.match(ci, /npm run ci/);
+  assert.match(ci, /docker\/build-push-action@f9f3042/);
+  assert.match(release, /ghcr\.io\/moniby\/applitrail/);
+  assert.match(release, /provenance: true/);
+  assert.match(release, /sbom: true/);
+  assert.match(nextConfig, /output: "standalone"/);
+  assert.equal(JSON.parse(packageJson).dependencies.jspdf, "^4.2.1");
+  assert.match(health, /status: "ok"/);
+  assert.match(readiness, /runtimeReadiness/);
+});

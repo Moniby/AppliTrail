@@ -1,4 +1,4 @@
-import { getResumeBucket } from ".";
+import { getResumeStorage } from ".";
 import { resumePrefix } from "./appliflow-store";
 
 export function validResumeId(value: string | null | undefined) {
@@ -12,7 +12,7 @@ export function resumeKey(userId: string, id: string) {
 export async function loadResumeForUser(userId: string, resume: { id?: string; name?: string; type?: string } | null | undefined) {
   const id = validResumeId(resume?.id);
   if (!id) return null;
-  const object = await getResumeBucket().get(resumeKey(userId, id));
+  const object = await getResumeStorage().get(resumeKey(userId, id));
   if (!object) return null;
   const bytes = new Uint8Array(await object.arrayBuffer());
   let binary = "";

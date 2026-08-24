@@ -1,10 +1,8 @@
-import { getD1, getResumeBucket } from ".";
+import { getSqlDatabase, getResumeStorage } from ".";
+import type { SqlResult } from "../platform/contracts";
+import type { Identity } from "../platform/identity";
 
-export type Identity = {
-  userId: string;
-  email: string;
-  displayName: string;
-};
+export type { Identity } from "../platform/identity";
 
 export type PlanId = "free" | "basic" | "standard";
 export type BillingInterval = "monthly" | "quarterly" | "six_month" | "annual";
@@ -120,7 +118,7 @@ export type BillingTransactionRecord = {
 const STATE_LIMIT_BYTES = 1_800_000;
 let schemaPromise: Promise<void> | null = null;
 
-function resultChanges(result: D1Result<unknown>) {
+function resultChanges(result: SqlResult<unknown>) {
   return Number((result.meta as { changes?: number }).changes ?? 0);
 }
 
@@ -134,7 +132,7 @@ export function isAdminIdentity(identity: Identity) {
 
 export async function ensureSchema() {
   if (schemaPromise) return schemaPromise;
-  const db = getD1();
+  const db = getSqlDatabase();
   schemaPromise = (async () => {
     await db.batch([
       db.prepare(`CREATE TABLE IF NOT EXISTS users (
@@ -263,7 +261,7 @@ export async function ensureSchema() {
 
 export async function ensureUser(identity: Identity): Promise<AccountRecord> {
   await ensureSchema();
-  const db = getD1();
+  const db = getSqlDatabase();
   const isAdmin = isAdminIdentity(identity);
   await db.prepare(`INSERT INTO users
       (id, email, display_name, plan, monthly_allowance, subscription_status, is_admin, updated_at)
@@ -280,7 +278,7 @@ export async function ensureUser(identity: Identity): Promise<AccountRecord> {
 
 export async function getAccount(userId: string): Promise<AccountRecord> {
   await ensureSchema();
-  const db = getD1();
+  const db = getSqlDatabase();
   const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance,
       bonus_credits, rollover_credits, rollover_expires_at, is_admin, account_status, terms_accepted_at, privacy_accepted_at,
       subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end,
@@ -358,7 +356,7 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
 
 export async function getUserState(userId: string) {
   await ensureSchema();
-  const row = await getD1().prepare("SELECT state_json, schema_version, updated_at FROM user_states WHERE user_id = ?")
+  const row = await getSqlDatabase().prepare("SELECT state_json, schema_version, updated_at FROM user_states WHERE user_id = ?")
     .bind(userId).first<{ state_json: string; schema_version: number; updated_at: string }>();
   if (!row) return null;
   try {
@@ -374,7 +372,7 @@ export async function saveUserState(userId: string, state: unknown) {
   if (new TextEncoder().encode(stateJson).byteLength > STATE_LIMIT_BYTES) {
     throw new Error("This account has too much draft content to save. Remove older generated drafts and try again.");
   }
-  await getD1().prepare(`INSERT INTO user_states (user_id, schema_version, state_json, updated_at)
+  await getSqlDatabase().prepare(`INSERT INTO user_states (user_id, schema_version, state_json, updated_at)
       VALUES (?, 4, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(user_id) DO UPDATE SET
         schema_version = excluded.schema_version,
@@ -436,7 +434,7 @@ function elapsedBillingMonths(account: AccountRecord, now = new Date()) {
 type IncludedUsageCounts = { monthly: number; rollover: number };
 
 async function includedUsageCounts(userId: string, start: string, end: string, includeStarted = false): Promise<IncludedUsageCounts> {
-  const row = await getD1().prepare(`SELECT
+  const row = await getSqlDatabase().prepare(`SELECT
       SUM(CASE WHEN credit_source = 'monthly' THEN 1 ELSE 0 END) AS monthly_used,
       SUM(CASE WHEN credit_source = 'rollover' THEN 1 ELSE 0 END) AS rollover_used
       FROM ai_usage WHERE user_id = ? AND kind != 'resume_extract'
@@ -457,7 +455,7 @@ async function renewalRolloverBalance(userId: string, account: AccountRecord) {
 
 async function recordRolloverEvent(userId: string, gateway: string, reference: string, kind: "credit_rollover_extension" | "credit_rollover_expiry", account: AccountRecord, credits: number) {
   if (credits <= 0) return;
-  await getD1().prepare(`INSERT OR IGNORE INTO billing_transactions
+  await getSqlDatabase().prepare(`INSERT OR IGNORE INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'CAD', 'succeeded')`)
     .bind(userId, gateway, reference, kind, `${account.plan}_${account.billingInterval}`, account.plan, credits).run();
@@ -467,7 +465,7 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
   await ensureSchema();
   const account = await getAccount(userId);
   const { start, end } = usageWindow(account);
-  const row = await getD1().prepare(`SELECT COUNT(*) AS used,
+  const row = await getSqlDatabase().prepare(`SELECT COUNT(*) AS used,
       SUM(CASE WHEN credit_source = 'monthly' THEN 1 ELSE 0 END) AS allowance_used
       FROM ai_usage
       WHERE user_id = ? AND status = 'succeeded' AND kind != 'resume_extract'
@@ -512,7 +510,7 @@ function databaseTimestamp(value: unknown) {
 
 export async function getUserCreditAudit(userId: string): Promise<CreditUsageRecord[]> {
   await ensureSchema();
-  const rows = await getD1().prepare(`SELECT id, kind, model, input_tokens, output_tokens, credit_source,
+  const rows = await getSqlDatabase().prepare(`SELECT id, kind, model, input_tokens, output_tokens, credit_source,
       COALESCE(finished_at, created_at) AS used_at
       FROM ai_usage
       WHERE user_id = ? AND status = 'succeeded' AND kind != 'resume_extract'
@@ -529,12 +527,12 @@ export async function getUserCreditAudit(userId: string): Promise<CreditUsageRec
 export async function recordLoginEvent(userId: string, userAgent: string) {
   await ensureSchema();
   const safeUserAgent = userAgent.slice(0, 500) || "Unknown browser";
-  const recent = await getD1().prepare(`SELECT id FROM login_events
+  const recent = await getSqlDatabase().prepare(`SELECT id FROM login_events
       WHERE user_id = ? AND user_agent = ? AND created_at >= datetime('now', '-5 minutes')
       ORDER BY created_at DESC LIMIT 1`)
     .bind(userId, safeUserAgent).first<{ id: number }>();
   if (recent) return false;
-  await getD1().prepare("INSERT INTO login_events (user_id, user_agent) VALUES (?, ?)")
+  await getSqlDatabase().prepare("INSERT INTO login_events (user_id, user_agent) VALUES (?, ?)")
     .bind(userId, safeUserAgent).run();
   return true;
 }
@@ -544,7 +542,7 @@ export async function beginGeneration(identity: Identity, kind: string, model: s
   if (account.accountStatus === "suspended") {
     return { allowed: false as const, reason: "suspended" as const, account };
   }
-  const db = getD1();
+  const db = getSqlDatabase();
   const staleCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
   const stalePurchased = await db.prepare(`SELECT COUNT(*) AS count FROM ai_usage
       WHERE user_id = ? AND status = 'started' AND credit_source = 'purchased' AND datetime(created_at) < datetime(?)`)
@@ -596,7 +594,7 @@ export async function beginGeneration(identity: Identity, kind: string, model: s
     }
   }
 
-  let result: D1Result<unknown>;
+  let result: SqlResult<unknown>;
   if (creditSource === "purchased") {
     const results = await db.batch([
       db.prepare(`UPDATE users SET bonus_credits = bonus_credits - 1, updated_at = CURRENT_TIMESTAMP
@@ -619,7 +617,7 @@ export async function beginGeneration(identity: Identity, kind: string, model: s
 
 export async function finishGeneration(usageId: number, status: "succeeded" | "failed", inputTokens = 0, outputTokens = 0) {
   await ensureSchema();
-  const db = getD1();
+  const db = getSqlDatabase();
   const usage = await db.prepare("SELECT user_id, status, credit_source FROM ai_usage WHERE id = ?")
     .bind(usageId).first<{ user_id: string; status: string; credit_source: string }>();
   if (!usage || usage.status !== "started") return;
@@ -638,7 +636,7 @@ export async function finishGeneration(usageId: number, status: "succeeded" | "f
 
 export async function acceptPolicies(userId: string) {
   await ensureSchema();
-  await getD1().prepare(`UPDATE users SET terms_accepted_at = CURRENT_TIMESTAMP,
+  await getSqlDatabase().prepare(`UPDATE users SET terms_accepted_at = CURRENT_TIMESTAMP,
       privacy_accepted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .bind(userId).run();
   return getAccount(userId);
@@ -646,19 +644,19 @@ export async function acceptPolicies(userId: string) {
 
 export async function deleteAccountData(userId: string) {
   await ensureSchema();
-  const bucket = getResumeBucket();
+  const bucket = getResumeStorage();
   let cursor: string | undefined;
   do {
     const listed = await bucket.list({ prefix: resumePrefix(userId), cursor });
     if (listed.objects.length) await bucket.delete(listed.objects.map((object) => object.key));
     cursor = listed.truncated ? listed.cursor : undefined;
   } while (cursor);
-  await getD1().batch([
-    getD1().prepare("DELETE FROM billing_transactions WHERE user_id = ?").bind(userId),
-    getD1().prepare("DELETE FROM login_events WHERE user_id = ?").bind(userId),
-    getD1().prepare("DELETE FROM ai_usage WHERE user_id = ?").bind(userId),
-    getD1().prepare("DELETE FROM user_states WHERE user_id = ?").bind(userId),
-    getD1().prepare("DELETE FROM users WHERE id = ?").bind(userId),
+  await getSqlDatabase().batch([
+    getSqlDatabase().prepare("DELETE FROM billing_transactions WHERE user_id = ?").bind(userId),
+    getSqlDatabase().prepare("DELETE FROM login_events WHERE user_id = ?").bind(userId),
+    getSqlDatabase().prepare("DELETE FROM ai_usage WHERE user_id = ?").bind(userId),
+    getSqlDatabase().prepare("DELETE FROM user_states WHERE user_id = ?").bind(userId),
+    getSqlDatabase().prepare("DELETE FROM users WHERE id = ?").bind(userId),
   ]);
 }
 
@@ -677,7 +675,7 @@ function billingTransaction(row: Record<string, unknown>): BillingTransactionRec
 
 export async function getBillingTransactions(userId: string, limit = 100) {
   await ensureSchema();
-  const rows = await getD1().prepare(`SELECT id, gateway, gateway_reference, kind, product_id, plan,
+  const rows = await getSqlDatabase().prepare(`SELECT id, gateway, gateway_reference, kind, product_id, plan,
       credits, amount_cents, currency, status, created_at FROM billing_transactions
       WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`)
     .bind(userId, Math.max(1, Math.min(200, Math.round(limit)))).all<Record<string, unknown>>();
@@ -689,7 +687,7 @@ export async function getBillingSummary(identity: Identity) {
   const [usage, transactions, linkage] = await Promise.all([
     getUsageSummary(identity.userId),
     getBillingTransactions(identity.userId),
-    getD1().prepare("SELECT payment_subscription_id FROM users WHERE id = ?")
+    getSqlDatabase().prepare("SELECT payment_subscription_id FROM users WHERE id = ?")
       .bind(identity.userId).first<Record<string, unknown>>(),
   ]);
   const paymentSubscriptionId = linkage?.payment_subscription_id
@@ -711,7 +709,7 @@ export async function getBillingSummary(identity: Identity) {
 
 export async function getStripeLinkage(identity: Identity) {
   const account = await ensureUser(identity);
-  const row = await getD1().prepare(`SELECT payment_customer_id, payment_subscription_id
+  const row = await getSqlDatabase().prepare(`SELECT payment_customer_id, payment_subscription_id
       FROM users WHERE id = ?`).bind(identity.userId).first<Record<string, unknown>>();
   return {
     account,
@@ -722,20 +720,20 @@ export async function getStripeLinkage(identity: Identity) {
 
 export async function saveStripeCustomer(userId: string, customerId: string) {
   await ensureSchema();
-  await getD1().prepare(`UPDATE users SET payment_customer_id = ?, updated_at = CURRENT_TIMESTAMP
+  await getSqlDatabase().prepare(`UPDATE users SET payment_customer_id = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`).bind(customerId, userId).run();
 }
 
 export async function getAppSetting(key: string) {
   await ensureSchema();
-  const row = await getD1().prepare("SELECT value FROM app_settings WHERE key = ?")
+  const row = await getSqlDatabase().prepare("SELECT value FROM app_settings WHERE key = ?")
     .bind(key).first<{ value: string }>();
   return row?.value ?? null;
 }
 
 export async function saveAppSetting(key: string, value: string) {
   await ensureSchema();
-  await getD1().prepare(`INSERT INTO app_settings (key, value, updated_at)
+  await getSqlDatabase().prepare(`INSERT INTO app_settings (key, value, updated_at)
       VALUES (?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`)
     .bind(key, value).run();
@@ -809,12 +807,12 @@ async function stripeUserId(object: Record<string, unknown>) {
   const metadata = stripeMetadata(object);
   const direct = String(metadata.user_id ?? object.client_reference_id ?? "").trim();
   if (direct) {
-    const exists = await getD1().prepare("SELECT id FROM users WHERE id = ?").bind(direct).first<{ id: string }>();
+    const exists = await getSqlDatabase().prepare("SELECT id FROM users WHERE id = ?").bind(direct).first<{ id: string }>();
     if (exists) return direct;
   }
   const subscriptionId = stripeString(object.subscription);
   const customerId = stripeString(object.customer);
-  const row = await getD1().prepare(`SELECT id FROM users
+  const row = await getSqlDatabase().prepare(`SELECT id FROM users
       WHERE (? != '' AND payment_subscription_id = ?) OR (? != '' AND payment_customer_id = ?)
       LIMIT 1`).bind(subscriptionId, subscriptionId, customerId, customerId).first<{ id: string }>();
   return row?.id ?? null;
@@ -827,7 +825,7 @@ async function applyStripeCheckoutSession(object: Record<string, unknown>) {
   const productId = String(metadata.product_id ?? "");
   const customerId = stripeString(object.customer);
   const subscriptionId = stripeString(object.subscription);
-  const db = getD1();
+  const db = getSqlDatabase();
   if (customerId) {
     await db.prepare(`UPDATE users SET payment_customer_id = ?,
         payment_subscription_id = CASE WHEN ? != '' THEN ? ELSE payment_subscription_id END,
@@ -883,7 +881,7 @@ async function applyStripeSubscription(object: Record<string, unknown>, deleted 
     const subscriptionReference = stripeString(object.id) || previous.billingPeriodEnd || new Date().toISOString();
     await recordRolloverEvent(userId, "stripe", `stripe:rollover-expiry:${subscriptionReference}`,
       "credit_rollover_expiry", previous, expiredCredits);
-    await getD1().prepare(`UPDATE users SET plan = 'free', monthly_allowance = ?, subscription_status = 'free',
+    await getSqlDatabase().prepare(`UPDATE users SET plan = 'free', monthly_allowance = ?, subscription_status = 'free',
         billing_interval = 'monthly', billing_period_start = NULL, billing_period_end = NULL,
         rollover_credits = 0, rollover_expires_at = NULL, cancel_at_period_end = 0, payment_subscription_id = NULL,
         plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -896,7 +894,7 @@ async function applyStripeSubscription(object: Record<string, unknown>, deleted 
   const customerId = stripeString(object.customer);
   const subscriptionId = stripeString(object.id);
   if (!["active", "trialing"].includes(status)) {
-    await getD1().prepare(`UPDATE users SET subscription_status = CASE WHEN plan = 'free' THEN 'free' ELSE 'past_due' END,
+    await getSqlDatabase().prepare(`UPDATE users SET subscription_status = CASE WHEN plan = 'free' THEN 'free' ELSE 'past_due' END,
         billing_period_start = COALESCE(?, billing_period_start), billing_period_end = COALESCE(?, billing_period_end),
         payment_customer_id = CASE WHEN ? != '' THEN ? ELSE payment_customer_id END,
         payment_subscription_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -910,7 +908,7 @@ async function applyStripeSubscription(object: Record<string, unknown>, deleted 
   const rolloverCredits = subscription.interval.id === "monthly" ? 0
     : renewed ? Math.min(newTermCap, await renewalRolloverBalance(userId, previous))
       : Math.min(newTermCap, previous.rolloverCredits);
-  await getD1().prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = ?,
+  await getSqlDatabase().prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = ?,
       billing_interval = ?, billing_period_start = COALESCE(?, billing_period_start),
       billing_period_end = COALESCE(?, billing_period_end), rollover_credits = ?,
       rollover_expires_at = ?, cancel_at_period_end = ?,
@@ -930,11 +928,11 @@ async function applyStripeInvoice(object: Record<string, unknown>, paid: boolean
   const userId = await stripeUserId(object);
   if (!userId) throw new Error("Stripe invoice could not be matched to an AppliTrail account.");
   if (!paid) {
-    await getD1().prepare(`UPDATE users SET subscription_status = 'past_due', updated_at = CURRENT_TIMESTAMP
+    await getSqlDatabase().prepare(`UPDATE users SET subscription_status = 'past_due', updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND plan != 'free'`).bind(userId).run();
     return;
   }
-  const row = await getD1().prepare("SELECT plan, billing_interval FROM users WHERE id = ?")
+  const row = await getSqlDatabase().prepare("SELECT plan, billing_interval FROM users WHERE id = ?")
     .bind(userId).first<Record<string, unknown>>();
   const plan = isPlanId(row?.plan) ? row.plan : null;
   const interval = isBillingInterval(row?.billing_interval) ? row.billing_interval : "monthly";
@@ -943,15 +941,15 @@ async function applyStripeInvoice(object: Record<string, unknown>, paid: boolean
   const billingReason = String(object.billing_reason ?? "");
   const reference = billingReason === "subscription_create" && subscriptionId
     ? `stripe:subscription:${subscriptionId}:initial` : `stripe:invoice:${invoiceId}`;
-  await getD1().batch([
-    getD1().prepare(`INSERT OR IGNORE INTO billing_transactions
+  await getSqlDatabase().batch([
+    getSqlDatabase().prepare(`INSERT OR IGNORE INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
       VALUES (?, 'stripe', ?, ?, ?, ?, 0, ?, ?, 'succeeded')`)
       .bind(userId, reference,
         billingReason === "subscription_create" ? "subscription_purchase" : "subscription_renewal",
         plan ? `${plan}_${interval}` : "subscription", plan,
         Number(object.amount_paid ?? 0), String(object.currency ?? "cad").toUpperCase()),
-    getD1().prepare(`UPDATE users SET subscription_status = CASE WHEN cancel_at_period_end = 1 THEN 'canceling' ELSE 'active' END,
+    getSqlDatabase().prepare(`UPDATE users SET subscription_status = CASE WHEN cancel_at_period_end = 1 THEN 'canceling' ELSE 'active' END,
       updated_at = CURRENT_TIMESTAMP WHERE id = ? AND plan != 'free'`).bind(userId),
   ]);
 }
@@ -959,7 +957,7 @@ async function applyStripeInvoice(object: Record<string, unknown>, paid: boolean
 export async function processStripeWebhookEvent(event: StripeWebhookEvent) {
   await ensureSchema();
   if (!event.id || !event.type) throw new Error("Stripe sent an invalid webhook event.");
-  const db = getD1();
+  const db = getSqlDatabase();
   const claimed = await db.prepare(`INSERT OR IGNORE INTO stripe_webhook_events
       (event_id, event_type, status) VALUES (?, ?, 'processing')`).bind(event.id, event.type).run();
   if (resultChanges(claimed) === 0) {
@@ -1011,11 +1009,11 @@ export async function completeDemoCheckout(identity: Identity, productId: string
   const demoKey = process.env.APPLIFLOW_DEMO_PAYMENT_KEY?.trim() || "appliflow-demo-checkout-v1";
   if (!demoKey.startsWith("appliflow-demo-")) throw new Error("The sandbox payment gateway is not configured correctly.");
   const reference = safeReference("demo", identity, requestId);
-  const existing = await getD1().prepare("SELECT id FROM billing_transactions WHERE gateway_reference = ?")
+  const existing = await getSqlDatabase().prepare("SELECT id FROM billing_transactions WHERE gateway_reference = ?")
     .bind(reference).first<{ id: number }>();
   if (existing) return getBillingSummary(identity);
 
-  const db = getD1();
+  const db = getSqlDatabase();
   const subscription = subscriptionProduct(productId);
   if (subscription) {
     const { plan, interval, amountCents } = subscription;
@@ -1065,7 +1063,7 @@ export async function scheduleSubscriptionCancellation(identity: Identity, reque
   if (account.plan === "free") throw new Error("The Free plan has no subscription to cancel.");
   if (account.cancelAtPeriodEnd) return getBillingSummary(identity);
   const reference = safeReference(paymentMode(), identity, requestId);
-  const db = getD1();
+  const db = getSqlDatabase();
   const inserted = await db.prepare(`INSERT OR IGNORE INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
       VALUES (?, ?, ?, 'subscription_cancel', ?, ?, 0, 0, 'CAD', 'succeeded')`)
@@ -1081,7 +1079,7 @@ export async function resumeSubscription(identity: Identity, requestId: string) 
   const account = await ensureUser(identity);
   if (account.plan === "free" || !account.cancelAtPeriodEnd) return getBillingSummary(identity);
   const reference = safeReference(paymentMode(), identity, requestId);
-  const db = getD1();
+  const db = getSqlDatabase();
   const inserted = await db.prepare(`INSERT OR IGNORE INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
       VALUES (?, ?, ?, 'subscription_resume', ?, ?, 0, 0, 'CAD', 'succeeded')`)
@@ -1096,7 +1094,7 @@ export async function resumeSubscription(identity: Identity, requestId: string) 
 export async function adminSummary(identity: Identity) {
   const account = await ensureUser(identity);
   if (!account.isAdmin) throw new Error("Administrator access is required.");
-  const db = getD1();
+  const db = getSqlDatabase();
   const totals = await db.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
       (SELECT COUNT(*) FROM users WHERE account_status = 'suspended') AS suspended,
@@ -1154,7 +1152,7 @@ export async function adminSummary(identity: Identity) {
 export async function adminUserDetail(identity: Identity, targetUserId: string) {
   const account = await ensureUser(identity);
   if (!account.isAdmin) throw new Error("Administrator access is required.");
-  const db = getD1();
+  const db = getSqlDatabase();
   const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance, bonus_credits, is_admin,
       account_status, subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end,
       created_at, updated_at,
@@ -1197,10 +1195,10 @@ export async function setMonthlyAllowance(identity: Identity, targetUserId: stri
   if (!account.isAdmin) throw new Error("Administrator access is required.");
   const safeAmount = Math.max(0, Math.min(500, Math.round(amount)));
   const reference = `admin:${identity.userId}:${crypto.randomUUID()}`;
-  await getD1().batch([
-    getD1().prepare(`UPDATE users SET monthly_allowance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+  await getSqlDatabase().batch([
+    getSqlDatabase().prepare(`UPDATE users SET monthly_allowance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .bind(safeAmount, targetUserId),
-    getD1().prepare(`INSERT INTO billing_transactions
+    getSqlDatabase().prepare(`INSERT INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, credits, amount_cents, currency, status)
       VALUES (?, 'admin', ?, 'allowance_adjustment', ?, 0, 0, 'CAD', 'succeeded')`)
       .bind(targetUserId, reference, `monthly_limit_${safeAmount}`),
@@ -1212,7 +1210,7 @@ export async function setAccountStatus(identity: Identity, targetUserId: string,
   if (!account.isAdmin) throw new Error("Administrator access is required.");
   if (targetUserId === identity.userId) throw new Error("You cannot suspend your own administrator account.");
   if (status !== "active" && status !== "suspended") throw new Error("Choose a valid account status.");
-  await getD1().prepare(`UPDATE users SET account_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+  await getSqlDatabase().prepare(`UPDATE users SET account_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .bind(status, targetUserId).run();
 }
 
@@ -1220,7 +1218,7 @@ export async function setAdminRole(identity: Identity, targetUserId: string, mak
   const account = await ensureUser(identity);
   if (!account.isAdmin) throw new Error("Administrator access is required.");
   if (targetUserId === identity.userId) throw new Error("You cannot change your own administrator role.");
-  const target = await getD1().prepare("SELECT id, email, display_name, is_admin FROM users WHERE id = ?")
+  const target = await getSqlDatabase().prepare("SELECT id, email, display_name, is_admin FROM users WHERE id = ?")
     .bind(targetUserId).first<Record<string, unknown>>();
   if (!target) throw new Error("User not found.");
   const configuredAdmin = isAdminIdentity({
@@ -1228,10 +1226,10 @@ export async function setAdminRole(identity: Identity, targetUserId: string, mak
   });
   if (!makeAdmin && configuredAdmin) throw new Error("The configured owner administrator cannot be removed.");
   const reference = `admin:${identity.userId}:${crypto.randomUUID()}`;
-  await getD1().batch([
-    getD1().prepare("UPDATE users SET is_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+  await getSqlDatabase().batch([
+    getSqlDatabase().prepare("UPDATE users SET is_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .bind(makeAdmin ? 1 : 0, targetUserId),
-    getD1().prepare(`INSERT INTO billing_transactions
+    getSqlDatabase().prepare(`INSERT INTO billing_transactions
       (user_id, gateway, gateway_reference, kind, product_id, credits, amount_cents, currency, status)
       VALUES (?, 'admin', ?, ?, 'admin_role', 0, 0, 'CAD', 'succeeded')`)
       .bind(targetUserId, reference, makeAdmin ? "admin_role_granted" : "admin_role_revoked"),

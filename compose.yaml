@@ -1,0 +1,21 @@
+services:
+  applitrail:
+    build:
+      context: .
+      args:
+        APPLITRAIL_RELEASE: local-container
+    image: applitrail:local
+    ports:
+      - "3000:3000"
+    environment:
+      APPLIFLOW_PAYMENT_MODE: demo
+      APPLIFLOW_ADMIN_EMAIL: ${APPLIFLOW_ADMIN_EMAIL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    volumes:
+      - applitrail-data:/data
+    restart: unless-stopped
+
+volumes:
+  applitrail-data:

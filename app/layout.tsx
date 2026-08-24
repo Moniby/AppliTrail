@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://careerflow-tobi-applications.tobimonilari.chatgpt.site"),
+  metadataBase: new URL(process.env.APPLITRAIL_PUBLIC_URL || "https://applitrail.com"),
   title: "AppliTrail | Job Application Studio",
   description: "Track applications and prepare tailored career materials.",
   icons: {

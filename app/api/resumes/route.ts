@@ -1,4 +1,4 @@
-import { getResumeBucket } from "../../../db";
+import { getResumeStorage } from "../../../db";
 import { ensureUser } from "../../../db/appliflow-store";
 import { resumeKey, validResumeId } from "../../../db/resume-storage";
 import { authenticationRequired, requestUser } from "../../request-user";
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
     const id = crypto.randomUUID();
     const uploadedAt = new Date().toISOString();
-    await getResumeBucket().put(resumeKey(identity.userId, id), await file.arrayBuffer(), {
+    await getResumeStorage().put(resumeKey(identity.userId, id), await file.arrayBuffer(), {
       httpMetadata: { contentType },
       customMetadata: { ownerId: identity.userId, originalName: file.name.slice(0, 300), uploadedAt },
     });
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   if (account.accountStatus === "suspended") return Response.json({ error: "This AppliTrail account is suspended." }, { status: 403 });
   const id = validResumeId(new URL(request.url).searchParams.get("id"));
   if (!id) return Response.json({ error: "A valid resume is required." }, { status: 400 });
-  const object = await getResumeBucket().get(resumeKey(identity.userId, id));
+  const object = await getResumeStorage().get(resumeKey(identity.userId, id));
   if (!object) return Response.json({ error: "Resume not found." }, { status: 404 });
   const name = object.customMetadata?.originalName || "resume";
   const headers = new Headers();
@@ -63,6 +63,6 @@ export async function DELETE(request: Request) {
   if (account.accountStatus === "suspended") return Response.json({ error: "This AppliTrail account is suspended." }, { status: 403 });
   const id = validResumeId(new URL(request.url).searchParams.get("id"));
   if (!id) return Response.json({ error: "A valid resume is required." }, { status: 400 });
-  await getResumeBucket().delete(resumeKey(identity.userId, id));
+  await getResumeStorage().delete(resumeKey(identity.userId, id));
   return Response.json({ deleted: true });
 }

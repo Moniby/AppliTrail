@@ -129,7 +129,8 @@ export async function GET(request: Request) {
     if (account.accountStatus === "suspended") return Response.json({ error: "This AppliTrail account is suspended. Contact the administrator for help." }, { status: 403 });
     const [stored, usage, creditAudit] = await Promise.all([getUserState(identity.userId), getUsageSummary(identity.userId), getUserCreditAudit(identity.userId)]);
     return Response.json({ account, usage, creditAudit, hasState: Boolean(stored), state: stored?.state ?? null, updatedAt: stored?.updatedAt ?? null });
-  } catch {
+  } catch (error) {
+    console.error("applitrail.state.load_failed", error);
     return Response.json({ error: "AppliTrail could not load your account data. Please refresh and try again." }, { status: 500 });
   }
 }
