@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 const frequentlyAskedQuestions = [
   {
     question: "What happens if my Basic or Standard subscription is not renewed?",
-    answer: "Your applications are not deleted. You can continue viewing and updating every saved application, note, date and document. You cannot add another application until you renew a Basic or Standard subscription.",
+    answer: "Your applications are not deleted. You can continue viewing and updating every saved application, note, date and document. You cannot add another application until you renew a Basic or Standard subscription. Any unused included rollover credits expire at the end of the unrenewed term.",
   },
   {
     question: "Will cancelling my subscription delete my applications or Master CVs?",
-    answer: "No. Cancellation stops the next renewal, but paid access continues until the end of the current billing term. After the term ends, your saved information remains in your account and new application creation is paused until renewal.",
+    answer: "No. Cancellation stops the next renewal, but paid access continues until the end of the current billing term. After the term ends, your saved information remains in your account, new application creation is paused and unused included rollover credits expire.",
   },
   {
     question: "Can a Free account buy extra AI credits?",
@@ -23,7 +23,15 @@ const frequentlyAskedQuestions = [
   },
   {
     question: "Do unused AI generations roll over?",
-    answer: "Included monthly generations reset each month and do not roll over. Extra credits purchased by an active paid member do not expire and are used after the monthly allowance.",
+    answer: "On the Monthly plan, unused included generations reset each month. On Quarterly, 6-month and Annual plans, unused included generations roll over during the paid billing term. If the subscription renews successfully, the remaining balance carries into the renewed term and receives a new expiry date. If it is not renewed, that included rollover balance expires at term end.",
+  },
+  {
+    question: "Is there a limit on rolled-over AI credits?",
+    answer: "Yes. The rollover cap matches the full included allowance for the billing term: Basic can hold up to 30 credits on Quarterly, 60 on 6-month and 120 on Annual; Standard can hold up to 60, 120 and 240 respectively. The cap prevents balances from growing indefinitely.",
+  },
+  {
+    question: "What happens to extra credits I purchased if my paid plan ends?",
+    answer: "Purchased extra credits do not expire. They stay saved on your account, but can be used only while a Basic or Standard subscription is active. Renew a paid plan and the saved purchased credits become available again.",
   },
   {
     question: "How many applications and Master CVs can I keep?",
@@ -43,7 +51,7 @@ const frequentlyAskedQuestions = [
   },
   {
     question: "How do quarterly, six-month and annual plans work?",
-    answer: "The selected term is paid upfront and renews at the same frequency. Included AI generations still refresh monthly throughout the prepaid term. Longer terms include the saving shown on the pricing cards.",
+    answer: "The selected term is paid upfront and renews at the same frequency. A new included AI allocation is added each month, and unused included credits roll over through that billing term. A successful renewal carries the remaining balance into the next term; without renewal, it expires. Longer terms include the saving shown on the pricing cards.",
   },
   {
     question: "Is my job-search information private?",

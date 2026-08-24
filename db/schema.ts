@@ -8,6 +8,8 @@ export const users = sqliteTable("users", {
   plan: text("plan").notNull().default("free"),
   monthlyAllowance: integer("monthly_allowance").notNull().default(2),
   bonusCredits: integer("bonus_credits").notNull().default(0),
+  rolloverCredits: integer("rollover_credits").notNull().default(0),
+  rolloverExpiresAt: text("rollover_expires_at"),
   isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
   accountStatus: text("account_status").notNull().default("active"),
   termsAcceptedAt: text("terms_accepted_at"),

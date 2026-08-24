@@ -57,6 +57,13 @@
       "when": 1787522305859,
       "tag": "0007_numerous_gorilla_man",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787544892334,
+      "tag": "0008_flat_titanium_man",
+      "breakpoints": true
     }
   ]
 }

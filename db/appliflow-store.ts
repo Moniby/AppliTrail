@@ -64,6 +64,8 @@ export type AccountRecord = Identity & {
   plan: PlanId;
   monthlyAllowance: number;
   bonusCredits: number;
+  rolloverCredits: number;
+  rolloverExpiresAt: string | null;
   isAdmin: boolean;
   accountStatus: "active" | "suspended";
   termsAcceptedAt: string | null;
@@ -81,6 +83,12 @@ export type UsageSummary = {
   allowanceUsed: number;
   allowance: number;
   bonusCredits: number;
+  monthlyCredits: number;
+  rolloverCredits: number;
+  purchasedCredits: number;
+  includedRemaining: number;
+  rolloverEnabled: boolean;
+  rolloverExpiresAt: string | null;
   remaining: number;
   resetsAt: string;
 };
@@ -91,7 +99,7 @@ export type CreditUsageRecord = {
   model: string;
   inputTokens: number;
   outputTokens: number;
-  creditSource: "monthly" | "purchased";
+  creditSource: "monthly" | "rollover" | "purchased";
   usedAt: string;
 };
 
@@ -136,6 +144,8 @@ export async function ensureSchema() {
         plan TEXT NOT NULL DEFAULT 'free',
         monthly_allowance INTEGER NOT NULL DEFAULT 2,
         bonus_credits INTEGER NOT NULL DEFAULT 0,
+        rollover_credits INTEGER NOT NULL DEFAULT 0,
+        rollover_expires_at TEXT,
         is_admin INTEGER NOT NULL DEFAULT 0,
         account_status TEXT NOT NULL DEFAULT 'active',
         terms_accepted_at TEXT,
@@ -224,6 +234,8 @@ export async function ensureSchema() {
       ["payment_customer_id", "ALTER TABLE users ADD COLUMN payment_customer_id TEXT"],
       ["payment_subscription_id", "ALTER TABLE users ADD COLUMN payment_subscription_id TEXT"],
       ["plan_updated_at", "ALTER TABLE users ADD COLUMN plan_updated_at TEXT"],
+      ["rollover_credits", "ALTER TABLE users ADD COLUMN rollover_credits INTEGER NOT NULL DEFAULT 0"],
+      ["rollover_expires_at", "ALTER TABLE users ADD COLUMN rollover_expires_at TEXT"],
     ] as const;
     for (const [name, statement] of missingUserColumns) {
       if (userColumns.results.some((column) => column.name === name)) continue;
@@ -270,7 +282,7 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
   await ensureSchema();
   const db = getD1();
   const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance,
-      bonus_credits, is_admin, account_status, terms_accepted_at, privacy_accepted_at,
+      bonus_credits, rollover_credits, rollover_expires_at, is_admin, account_status, terms_accepted_at, privacy_accepted_at,
       subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end,
       EXISTS(SELECT 1 FROM billing_transactions WHERE user_id = users.id
         AND kind IN ('subscription_purchase', 'subscription_renewal') AND status = 'succeeded') AS has_paid_history
@@ -279,11 +291,36 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
   const rawPlan = isPlanId(row.plan) ? row.plan : "free";
   const billingInterval = isBillingInterval(row.billing_interval) ? row.billing_interval : "monthly";
   const periodEnd = row.billing_period_end ? databaseTimestamp(row.billing_period_end) : null;
+  const account: AccountRecord = {
+    userId: String(row.id),
+    email: String(row.email),
+    displayName: String(row.display_name),
+    plan: rawPlan,
+    monthlyAllowance: Number(row.monthly_allowance),
+    bonusCredits: Number(row.bonus_credits),
+    rolloverCredits: Number(row.rollover_credits ?? 0),
+    rolloverExpiresAt: row.rollover_expires_at ? databaseTimestamp(row.rollover_expires_at) : null,
+    isAdmin: Number(row.is_admin) === 1,
+    accountStatus: row.account_status === "suspended" ? "suspended" : "active",
+    termsAcceptedAt: row.terms_accepted_at ? String(row.terms_accepted_at) : null,
+    privacyAcceptedAt: row.privacy_accepted_at ? String(row.privacy_accepted_at) : null,
+    subscriptionStatus: rawPlan === "free" ? "free" : Number(row.cancel_at_period_end) === 1 ? "canceling" : row.subscription_status === "past_due" ? "past_due" : "active",
+    billingInterval,
+    billingPeriodStart: row.billing_period_start ? databaseTimestamp(row.billing_period_start) : null,
+    billingPeriodEnd: periodEnd,
+    cancelAtPeriodEnd: Number(row.cancel_at_period_end) === 1,
+    applicationCreationLocked: row.subscription_status === "past_due"
+      || (rawPlan === "free" && Number(row.has_paid_history) === 1),
+  };
   if (rawPlan !== "free" && periodEnd && Date.parse(periodEnd) <= Date.now()) {
     if (Number(row.cancel_at_period_end) === 1) {
+      const expiredCredits = await renewalRolloverBalance(userId, account);
+      await recordRolloverEvent(userId, paymentMode(), `rollover-expiry:${userId}:${periodEnd}`,
+        "credit_rollover_expiry", account, expiredCredits);
       await db.prepare(`UPDATE users SET plan = 'free', monthly_allowance = ?, subscription_status = 'free',
           billing_interval = 'monthly', billing_period_start = NULL, billing_period_end = NULL, cancel_at_period_end = 0,
-          payment_subscription_id = NULL, plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          rollover_credits = 0, rollover_expires_at = NULL, payment_subscription_id = NULL,
+          plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`).bind(PLAN_CATALOG.free.allowance, userId).run();
       return getAccount(userId);
     }
@@ -297,37 +334,26 @@ export async function getAccount(userId: string): Promise<AccountRecord> {
       const renewalReference = `demo-renewal:${userId}:${nextStart.toISOString()}`;
       const renewal = subscriptionProduct(`${rawPlan}_${billingInterval}`);
       if (!renewal) throw new Error("The subscription renewal schedule is invalid.");
+      const rolloverCredits = await renewalRolloverBalance(userId, account);
       await db.batch([
         db.prepare(`UPDATE users SET billing_period_start = ?, billing_period_end = ?,
-          subscription_status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-          .bind(nextStart.toISOString(), nextEnd.toISOString(), userId),
+          rollover_credits = ?, rollover_expires_at = ?, subscription_status = 'active',
+          updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+          .bind(nextStart.toISOString(), nextEnd.toISOString(), rolloverCredits,
+            billingInterval === "monthly" ? null : nextEnd.toISOString(), userId),
         db.prepare(`INSERT OR IGNORE INTO billing_transactions
           (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
           VALUES (?, 'demo', ?, 'subscription_renewal', ?, ?, 0, ?, 'CAD', 'succeeded')`)
           .bind(userId, renewalReference, `${rawPlan}_${billingInterval}`, rawPlan, renewal.amountCents),
+        db.prepare(`INSERT OR IGNORE INTO billing_transactions
+          (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
+          VALUES (?, 'demo', ?, 'credit_rollover_extension', ?, ?, ?, 0, 'CAD', 'succeeded')`)
+          .bind(userId, `${renewalReference}:rollover`, `${rawPlan}_${billingInterval}`, rawPlan, rolloverCredits),
       ]);
       return getAccount(userId);
     }
   }
-  return {
-    userId: String(row.id),
-    email: String(row.email),
-    displayName: String(row.display_name),
-    plan: rawPlan,
-    monthlyAllowance: Number(row.monthly_allowance),
-    bonusCredits: Number(row.bonus_credits),
-    isAdmin: Number(row.is_admin) === 1,
-    accountStatus: row.account_status === "suspended" ? "suspended" : "active",
-    termsAcceptedAt: row.terms_accepted_at ? String(row.terms_accepted_at) : null,
-    privacyAcceptedAt: row.privacy_accepted_at ? String(row.privacy_accepted_at) : null,
-    subscriptionStatus: rawPlan === "free" ? "free" : Number(row.cancel_at_period_end) === 1 ? "canceling" : row.subscription_status === "past_due" ? "past_due" : "active",
-    billingInterval,
-    billingPeriodStart: row.billing_period_start ? databaseTimestamp(row.billing_period_start) : null,
-    billingPeriodEnd: periodEnd,
-    cancelAtPeriodEnd: Number(row.cancel_at_period_end) === 1,
-    applicationCreationLocked: row.subscription_status === "past_due"
-      || (rawPlan === "free" && Number(row.has_paid_history) === 1),
-  };
+  return account;
 }
 
 export async function getUserState(userId: string) {
@@ -388,6 +414,55 @@ function usageWindow(account: AccountRecord) {
   return monthWindow();
 }
 
+function activePaidCreditAccess(account: AccountRecord) {
+  return hasPaidPlanFeatures(account.plan)
+    && (account.subscriptionStatus === "active" || account.subscriptionStatus === "canceling");
+}
+
+function elapsedBillingMonths(account: AccountRecord, now = new Date()) {
+  if (!account.billingPeriodStart || !account.billingPeriodEnd) return 1;
+  const start = new Date(account.billingPeriodStart);
+  const end = new Date(account.billingPeriodEnd);
+  const termMonths = billingIntervalDetails(account.billingInterval).months;
+  let elapsed = 1;
+  let boundary = addUtcMonths(start, 1);
+  while (boundary.getTime() <= now.getTime() && boundary.getTime() < end.getTime() && elapsed < termMonths) {
+    elapsed += 1;
+    boundary = addUtcMonths(start, elapsed);
+  }
+  return Math.max(1, Math.min(termMonths, elapsed));
+}
+
+type IncludedUsageCounts = { monthly: number; rollover: number };
+
+async function includedUsageCounts(userId: string, start: string, end: string, includeStarted = false): Promise<IncludedUsageCounts> {
+  const row = await getD1().prepare(`SELECT
+      SUM(CASE WHEN credit_source = 'monthly' THEN 1 ELSE 0 END) AS monthly_used,
+      SUM(CASE WHEN credit_source = 'rollover' THEN 1 ELSE 0 END) AS rollover_used
+      FROM ai_usage WHERE user_id = ? AND kind != 'resume_extract'
+        AND status ${includeStarted ? "IN ('started', 'succeeded')" : "= 'succeeded'"}
+        AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`)
+    .bind(userId, start, end).first<{ monthly_used: number; rollover_used: number }>();
+  return { monthly: Number(row?.monthly_used ?? 0), rollover: Number(row?.rollover_used ?? 0) };
+}
+
+async function renewalRolloverBalance(userId: string, account: AccountRecord) {
+  if (account.billingInterval === "monthly" || !account.billingPeriodStart || !account.billingPeriodEnd) return 0;
+  const used = await includedUsageCounts(userId, account.billingPeriodStart, account.billingPeriodEnd, true);
+  const termCap = account.monthlyAllowance * billingIntervalDetails(account.billingInterval).months;
+  const unusedIncludedCredits = Math.max(0,
+    termCap + account.rolloverCredits - used.monthly - used.rollover);
+  return Math.min(termCap, unusedIncludedCredits);
+}
+
+async function recordRolloverEvent(userId: string, gateway: string, reference: string, kind: "credit_rollover_extension" | "credit_rollover_expiry", account: AccountRecord, credits: number) {
+  if (credits <= 0) return;
+  await getD1().prepare(`INSERT OR IGNORE INTO billing_transactions
+      (user_id, gateway, gateway_reference, kind, product_id, plan, credits, amount_cents, currency, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'CAD', 'succeeded')`)
+    .bind(userId, gateway, reference, kind, `${account.plan}_${account.billingInterval}`, account.plan, credits).run();
+}
+
 export async function getUsageSummary(userId: string): Promise<UsageSummary> {
   await ensureSchema();
   const account = await getAccount(userId);
@@ -400,12 +475,32 @@ export async function getUsageSummary(userId: string): Promise<UsageSummary> {
     .bind(userId, start, end).first<{ used: number; allowance_used: number }>();
   const used = Number(row?.used ?? 0);
   const allowanceUsed = Number(row?.allowance_used ?? 0);
+  const paidAccess = activePaidCreditAccess(account);
+  const rolloverEnabled = paidAccess && account.billingInterval !== "monthly"
+    && Boolean(account.billingPeriodStart && account.billingPeriodEnd);
+  let includedRemaining = account.plan === "free" ? Math.max(0, account.monthlyAllowance - allowanceUsed) : 0;
+  if (paidAccess && !rolloverEnabled) includedRemaining = Math.max(0, account.monthlyAllowance - allowanceUsed);
+  if (rolloverEnabled && account.billingPeriodStart && account.billingPeriodEnd) {
+    const cycleUsed = await includedUsageCounts(userId, account.billingPeriodStart, account.billingPeriodEnd);
+    const grantedToDate = account.monthlyAllowance * elapsedBillingMonths(account);
+    includedRemaining = Math.max(0,
+      grantedToDate + account.rolloverCredits - cycleUsed.monthly - cycleUsed.rollover);
+  }
+  const monthlyCredits = Math.min(Math.max(0, account.monthlyAllowance - allowanceUsed), includedRemaining);
+  const rolloverCredits = rolloverEnabled ? Math.max(0, includedRemaining - monthlyCredits) : 0;
+  const purchasedCredits = paidAccess ? account.bonusCredits : 0;
   return {
     used,
     allowanceUsed,
     allowance: account.monthlyAllowance,
-    bonusCredits: account.bonusCredits,
-    remaining: Math.max(0, account.monthlyAllowance - allowanceUsed) + account.bonusCredits,
+    bonusCredits: purchasedCredits,
+    monthlyCredits,
+    rolloverCredits,
+    purchasedCredits,
+    includedRemaining,
+    rolloverEnabled,
+    rolloverExpiresAt: rolloverEnabled ? account.billingPeriodEnd : null,
+    remaining: includedRemaining + purchasedCredits,
     resetsAt: end,
   };
 }
@@ -426,7 +521,7 @@ export async function getUserCreditAudit(userId: string): Promise<CreditUsageRec
   return rows.results.map((row) => ({
     id: Number(row.id), kind: String(row.kind), model: String(row.model),
     inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens),
-    creditSource: row.credit_source === "purchased" ? "purchased" : "monthly",
+    creditSource: row.credit_source === "purchased" ? "purchased" : row.credit_source === "rollover" ? "rollover" : "monthly",
     usedAt: databaseTimestamp(row.used_at),
   }));
 }
@@ -478,12 +573,27 @@ export async function beginGeneration(identity: Identity, kind: string, model: s
 
   let creditSource = "none";
   if (chargeCredit) {
-    const { start, end } = usageWindow(account);
-    const reserved = await db.prepare(`SELECT COUNT(*) AS count FROM ai_usage
-        WHERE user_id = ? AND kind != 'resume_extract' AND credit_source = 'monthly'
-          AND status IN ('started', 'succeeded') AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`)
-      .bind(identity.userId, start, end).first<{ count: number }>();
-    creditSource = Number(reserved?.count ?? 0) < account.monthlyAllowance ? "monthly" : "purchased";
+    if (activePaidCreditAccess(account) && account.billingInterval !== "monthly"
+        && account.billingPeriodStart && account.billingPeriodEnd) {
+      const cycleReserved = await includedUsageCounts(identity.userId, account.billingPeriodStart,
+        account.billingPeriodEnd, true);
+      const { start, end } = usageWindow(account);
+      const currentReserved = await db.prepare(`SELECT COUNT(*) AS count FROM ai_usage
+          WHERE user_id = ? AND kind != 'resume_extract' AND credit_source = 'monthly'
+            AND status IN ('started', 'succeeded') AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`)
+        .bind(identity.userId, start, end).first<{ count: number }>();
+      const grantedToDate = account.monthlyAllowance * elapsedBillingMonths(account);
+      const totalIncludedReserved = cycleReserved.monthly + cycleReserved.rollover;
+      creditSource = Number(currentReserved?.count ?? 0) < account.monthlyAllowance ? "monthly"
+        : totalIncludedReserved < grantedToDate + account.rolloverCredits ? "rollover" : "purchased";
+    } else {
+      const { start, end } = usageWindow(account);
+      const reserved = await db.prepare(`SELECT COUNT(*) AS count FROM ai_usage
+          WHERE user_id = ? AND kind != 'resume_extract' AND credit_source = 'monthly'
+            AND status IN ('started', 'succeeded') AND datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`)
+        .bind(identity.userId, start, end).first<{ count: number }>();
+      creditSource = Number(reserved?.count ?? 0) < account.monthlyAllowance ? "monthly" : "purchased";
+    }
   }
 
   let result: D1Result<unknown>;
@@ -732,7 +842,7 @@ async function applyStripeCheckoutSession(object: Record<string, unknown>) {
       ? `stripe:subscription:${subscriptionId}:initial` : `stripe:checkout:${sessionId}`;
     await db.batch([
       db.prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = 'active',
-          billing_interval = ?, cancel_at_period_end = 0,
+          billing_interval = ?, rollover_credits = 0, rollover_expires_at = NULL, cancel_at_period_end = 0,
           payment_customer_id = CASE WHEN ? != '' THEN ? ELSE payment_customer_id END,
           payment_subscription_id = CASE WHEN ? != '' THEN ? ELSE payment_subscription_id END,
           plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
@@ -764,13 +874,18 @@ async function applyStripeCheckoutSession(object: Record<string, unknown>) {
 async function applyStripeSubscription(object: Record<string, unknown>, deleted = false) {
   const userId = await stripeUserId(object);
   if (!userId) throw new Error("Stripe subscription could not be matched to an AppliTrail account.");
+  const previous = await getAccount(userId);
   const productId = await stripeSubscriptionProductId(object);
   const subscription = subscriptionProduct(productId);
   const status = String(object.status ?? "");
   if (deleted || status === "canceled") {
+    const expiredCredits = await renewalRolloverBalance(userId, previous);
+    const subscriptionReference = stripeString(object.id) || previous.billingPeriodEnd || new Date().toISOString();
+    await recordRolloverEvent(userId, "stripe", `stripe:rollover-expiry:${subscriptionReference}`,
+      "credit_rollover_expiry", previous, expiredCredits);
     await getD1().prepare(`UPDATE users SET plan = 'free', monthly_allowance = ?, subscription_status = 'free',
         billing_interval = 'monthly', billing_period_start = NULL, billing_period_end = NULL,
-        cancel_at_period_end = 0, payment_subscription_id = NULL,
+        rollover_credits = 0, rollover_expires_at = NULL, cancel_at_period_end = 0, payment_subscription_id = NULL,
         plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
       .bind(PLAN_CATALOG.free.allowance, userId).run();
     return;
@@ -789,14 +904,26 @@ async function applyStripeSubscription(object: Record<string, unknown>, deleted 
     return;
   }
   const appStatus = cancelAtPeriodEnd ? "canceling" : "active";
+  const renewed = Boolean(previous.billingPeriodStart && period.start
+    && Date.parse(period.start) > Date.parse(previous.billingPeriodStart));
+  const newTermCap = PLAN_CATALOG[subscription.plan].allowance * subscription.interval.months;
+  const rolloverCredits = subscription.interval.id === "monthly" ? 0
+    : renewed ? Math.min(newTermCap, await renewalRolloverBalance(userId, previous))
+      : Math.min(newTermCap, previous.rolloverCredits);
   await getD1().prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = ?,
       billing_interval = ?, billing_period_start = COALESCE(?, billing_period_start),
-      billing_period_end = COALESCE(?, billing_period_end), cancel_at_period_end = ?,
+      billing_period_end = COALESCE(?, billing_period_end), rollover_credits = ?,
+      rollover_expires_at = ?, cancel_at_period_end = ?,
       payment_customer_id = CASE WHEN ? != '' THEN ? ELSE payment_customer_id END,
       payment_subscription_id = ?, plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`).bind(subscription.plan, PLAN_CATALOG[subscription.plan].allowance, appStatus,
-        subscription.interval.id, period.start, period.end, cancelAtPeriodEnd ? 1 : 0,
+        subscription.interval.id, period.start, period.end, rolloverCredits,
+        subscription.interval.id === "monthly" ? null : period.end, cancelAtPeriodEnd ? 1 : 0,
         customerId, customerId, subscriptionId, userId).run();
+  if (renewed) {
+    await recordRolloverEvent(userId, "stripe", `stripe:rollover-extension:${subscriptionId}:${period.start}`,
+      "credit_rollover_extension", previous, rolloverCredits);
+  }
 }
 
 async function applyStripeInvoice(object: Record<string, unknown>, paid: boolean) {
@@ -900,10 +1027,13 @@ export async function completeDemoCheckout(identity: Identity, productId: string
     if (resultChanges(inserted) > 0) {
       const period = nextBillingPeriod(interval.id);
       await db.prepare(`UPDATE users SET plan = ?, monthly_allowance = ?, subscription_status = 'active',
-          billing_interval = ?, billing_period_start = ?, billing_period_end = ?, cancel_at_period_end = 0,
+          billing_interval = ?, billing_period_start = ?, billing_period_end = ?, rollover_credits = 0,
+          rollover_expires_at = ?, cancel_at_period_end = 0,
           payment_customer_id = COALESCE(payment_customer_id, ?), payment_subscription_id = ?,
           plan_updated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-        .bind(plan, product.allowance, interval.id, period.start, period.end, `demo_customer_${identity.userId}`, `demo_subscription_${identity.userId}`, identity.userId).run();
+        .bind(plan, product.allowance, interval.id, period.start, period.end,
+          interval.id === "monthly" ? null : period.end, `demo_customer_${identity.userId}`,
+          `demo_subscription_${identity.userId}`, identity.userId).run();
     }
     return getBillingSummary(identity);
   }
@@ -1012,7 +1142,7 @@ export async function adminSummary(identity: Identity) {
     creditAudit: auditRows.results.map((row) => ({
       id: Number(row.id), kind: String(row.kind), model: String(row.model),
       inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens), usedAt: databaseTimestamp(row.used_at),
-      creditSource: row.credit_source === "purchased" ? "purchased" : "monthly",
+      creditSource: row.credit_source === "purchased" ? "purchased" : row.credit_source === "rollover" ? "rollover" : "monthly",
       email: String(row.email), displayName: String(row.display_name),
     })),
     paymentAudit: paymentRows.results.map((row) => ({

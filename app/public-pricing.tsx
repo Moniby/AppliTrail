@@ -24,6 +24,7 @@ const plans = [
       [false, "Professional Word and PDF CV formats"],
       [false, "Reminders and calendar downloads"],
       [false, "Excel application-list export"],
+      [false, "Credit rollover on longer billing terms"],
     ],
   },
   {
@@ -38,6 +39,7 @@ const plans = [
       [true, "Professional Word and PDF CV formats"],
       [true, "Reminders and calendar downloads"],
       [true, "Excel application-list export"],
+      [true, "Credit rollover on longer billing terms"],
     ],
   },
   {
@@ -52,6 +54,7 @@ const plans = [
       [true, "Professional Word and PDF CV formats"],
       [true, "Reminders and calendar downloads"],
       [true, "Excel application-list export"],
+      [true, "Credit rollover on longer billing terms"],
     ],
   },
 ] as const;
@@ -77,7 +80,7 @@ export default function PublicPricing({ ctaHref, signedIn }: { ctaHref: string; 
 
   return <section id="pricing" className="landing-pricing">
     <div className="pricing-section-head">
-      <div><p className="eyebrow">SIMPLE PRICING · LOCAL CHECKOUT</p><h2>Choose a plan for your application pace.</h2><p>Compare every feature, then choose how often you want to pay. Included AI generations refresh monthly on every billing option.</p></div>
+      <div><p className="eyebrow">SIMPLE PRICING · LOCAL CHECKOUT</p><h2>Choose a plan for your application pace.</h2><p>Compare every feature, then choose how often you want to pay. Monthly plans reset each month. Longer plans add credits monthly and let unused included credits roll over during the paid term.</p></div>
       <label className="billing-frequency-select"><span>Billing frequency</span><select value={selectedInterval} onChange={(event) => setSelectedInterval(event.target.value as IntervalId)} aria-label="Billing frequency">{intervals.map((option) => <option value={option.id} key={option.id}>{option.label}{option.id === "monthly" ? "" : ` · ${option.saving}`}</option>)}</select></label>
     </div>
     <div className="landing-pricing-grid pricing-comparison-grid">
@@ -98,7 +101,7 @@ export default function PublicPricing({ ctaHref, signedIn }: { ctaHref: string; 
         </article>;
       })}
     </div>
-    <p className="landing-billing-note">Longer plans are paid upfront. Included AI generations refresh monthly and do not roll over.</p>
+    <p className="landing-billing-note">Longer plans are paid upfront. Unused included credits roll over during the prepaid term and expire at term end if the subscription is not renewed.</p>
     <p className="landing-local-pricing"><strong>Paying outside Canada?</strong> No worries. At checkout, you will see the equivalent in your local currency where supported.</p>
     <p className="landing-credit-note">Basic and Standard members can buy additional AI credits for $1.50 CAD each. Extra-credit purchases are not available on the Free plan. Prices exclude applicable taxes. Stripe checkout is currently in test mode, so no real payment is collected.</p>
   </section>;
