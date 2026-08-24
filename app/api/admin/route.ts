@@ -1,4 +1,4 @@
-import { adminSummary, adminUserDetail, setAccountStatus, setMonthlyAllowance } from "../../../db/appliflow-store";
+import { adminSummary, adminUserDetail, setAccountStatus, setAdminRole, setMonthlyAllowance } from "../../../db/appliflow-store";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 export async function GET(request: Request) {
@@ -15,13 +15,16 @@ export async function POST(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
-    const payload = await request.json() as { action?: "allowance" | "status"; userId?: string; monthlyAllowance?: number; status?: "active" | "suspended" };
+    const payload = await request.json() as { action?: "allowance" | "status" | "role"; userId?: string; monthlyAllowance?: number; status?: "active" | "suspended"; isAdmin?: boolean };
     if (!payload.userId) return Response.json({ error: "Choose a user." }, { status: 400 });
     if (payload.action === "status") {
       if (payload.status !== "active" && payload.status !== "suspended") return Response.json({ error: "Choose a valid account status." }, { status: 400 });
       await setAccountStatus(identity, payload.userId, payload.status);
     } else if (payload.action === "allowance") {
       await setMonthlyAllowance(identity, payload.userId, Number(payload.monthlyAllowance) || 0);
+    } else if (payload.action === "role") {
+      if (typeof payload.isAdmin !== "boolean") return Response.json({ error: "Choose a valid administrator role." }, { status: 400 });
+      await setAdminRole(identity, payload.userId, payload.isAdmin);
     } else {
       return Response.json({ error: "Choose a valid administrator action." }, { status: 400 });
     }

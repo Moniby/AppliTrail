@@ -112,6 +112,8 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountRoute, /recordLoginEvent/);
   assert.match(adminRoute, /setAccountStatus/);
   assert.match(adminRoute, /setMonthlyAllowance/);
+  assert.match(adminRoute, /setAdminRole/);
+  assert.match(adminRoute, /payload\.action === "role"/);
   assert.match(adminRoute, /adminUserDetail/);
   assert.match(adminRoute, /searchParams\.get\("userId"\)/);
   assert.match(phaseThreeMigration, /ALTER TABLE `users` ADD `account_status`/);
@@ -230,6 +232,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Admin dashboard/);
   assert.match(dashboard, /view==="admin"&&account\?\.isAdmin/);
   assert.match(dashboard, /adminView/);
+  assert.match(dashboard, /Make admin/);
+  assert.match(dashboard, /Remove admin/);
+  assert.match(dashboard, /roleConfirmation/);
+  assert.match(dashboard, /admin-plan-meta/);
   assert.match(dashboard, /Login information/);
   assert.match(dashboard, /Passwords, IP addresses/);
   assert.match(dashboard, /action:"record-login"/);
@@ -279,5 +285,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(accountStore, /kind != 'resume_extract'/);
   assert.match(accountStore, /CREATE TABLE IF NOT EXISTS login_events/);
   assert.match(accountStore, /adminUserDetail/);
+  assert.match(accountStore, /setAdminRole/);
+  assert.match(accountStore, /You cannot change your own administrator role/);
+  assert.match(accountStore, /admin_role_granted/);
+  assert.match(accountStore, /admin_role_revoked/);
   assert.match(accountStore, /datetime\('now', '-5 minutes'\)/);
 });

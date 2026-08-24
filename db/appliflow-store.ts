@@ -978,7 +978,7 @@ export async function adminSummary(identity: Identity) {
         WHERE status = 'succeeded' AND amount_cents > 0) AS sandbox_revenue_cents`)
     .first<{ users: number; suspended: number; paid_subscribers: number; generations: number; tokens: number; sandbox_revenue_cents: number }>();
   const rows = await db.prepare(`SELECT u.id, u.email, u.display_name, u.plan, u.monthly_allowance,
-      u.bonus_credits, u.account_status, u.subscription_status, u.billing_interval, u.billing_period_end,
+      u.bonus_credits, u.is_admin, u.account_status, u.subscription_status, u.billing_interval, u.billing_period_end,
       u.cancel_at_period_end, u.created_at, u.updated_at, COUNT(a.id) AS generations,
       (SELECT COUNT(*) FROM login_events l WHERE l.user_id = u.id) AS login_count,
       (SELECT MAX(l.created_at) FROM login_events l WHERE l.user_id = u.id) AS last_login_at
@@ -1000,6 +1000,7 @@ export async function adminSummary(identity: Identity) {
     users: rows.results.map((row) => ({
       id: String(row.id), email: String(row.email), displayName: String(row.display_name), plan: String(row.plan),
       monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),
+      isAdmin: Number(row.is_admin) === 1,
       accountStatus: row.account_status === "suspended" ? "suspended" : "active",
       subscriptionStatus: String(row.subscription_status),
       billingInterval: isBillingInterval(row.billing_interval) ? row.billing_interval : "monthly",
@@ -1024,7 +1025,7 @@ export async function adminUserDetail(identity: Identity, targetUserId: string) 
   const account = await ensureUser(identity);
   if (!account.isAdmin) throw new Error("Administrator access is required.");
   const db = getD1();
-  const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance, bonus_credits,
+  const row = await db.prepare(`SELECT id, email, display_name, plan, monthly_allowance, bonus_credits, is_admin,
       account_status, subscription_status, billing_interval, billing_period_start, billing_period_end, cancel_at_period_end,
       created_at, updated_at,
       (SELECT COUNT(*) FROM ai_usage a WHERE a.user_id = users.id
@@ -1043,6 +1044,7 @@ export async function adminUserDetail(identity: Identity, targetUserId: string) 
     user: {
       id: String(row.id), email: String(row.email), displayName: String(row.display_name), plan: String(row.plan),
       monthlyAllowance: Number(row.monthly_allowance), bonusCredits: Number(row.bonus_credits),
+      isAdmin: Number(row.is_admin) === 1,
       accountStatus: row.account_status === "suspended" ? "suspended" : "active",
       subscriptionStatus: String(row.subscription_status),
       billingInterval: isBillingInterval(row.billing_interval) ? row.billing_interval : "monthly",
@@ -1082,4 +1084,26 @@ export async function setAccountStatus(identity: Identity, targetUserId: string,
   if (status !== "active" && status !== "suspended") throw new Error("Choose a valid account status.");
   await getD1().prepare(`UPDATE users SET account_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .bind(status, targetUserId).run();
+}
+
+export async function setAdminRole(identity: Identity, targetUserId: string, makeAdmin: boolean) {
+  const account = await ensureUser(identity);
+  if (!account.isAdmin) throw new Error("Administrator access is required.");
+  if (targetUserId === identity.userId) throw new Error("You cannot change your own administrator role.");
+  const target = await getD1().prepare("SELECT id, email, display_name, is_admin FROM users WHERE id = ?")
+    .bind(targetUserId).first<Record<string, unknown>>();
+  if (!target) throw new Error("User not found.");
+  const configuredAdmin = isAdminIdentity({
+    userId: String(target.id), email: String(target.email), displayName: String(target.display_name),
+  });
+  if (!makeAdmin && configuredAdmin) throw new Error("The configured owner administrator cannot be removed.");
+  const reference = `admin:${identity.userId}:${crypto.randomUUID()}`;
+  await getD1().batch([
+    getD1().prepare("UPDATE users SET is_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(makeAdmin ? 1 : 0, targetUserId),
+    getD1().prepare(`INSERT INTO billing_transactions
+      (user_id, gateway, gateway_reference, kind, product_id, credits, amount_cents, currency, status)
+      VALUES (?, 'admin', ?, ?, 'admin_role', 0, 0, 'CAD', 'succeeded')`)
+      .bind(targetUserId, reference, makeAdmin ? "admin_role_granted" : "admin_role_revoked"),
+  ]);
 }
