@@ -81,6 +81,45 @@ test("finds About the job semantically when LinkedIn class selectors change", as
   assert.match(result.description, /Role Summary/);
 });
 
+test("extracts Indeed's Full job description section", async () => {
+  const document = page({
+    '[data-testid="jobsearch-JobInfoHeader-title"]': element("IT Specialist"),
+    '[data-testid="inlineHeader-companyName"]': element("Nurse Next Door"),
+    '[data-testid="inlineHeader-companyLocation"]': element("1788 West 5th Avenue, Vancouver, BC V6J 1P2"),
+    "#jobDescriptionText": element("Full job description\nAt Nurse Next Door, we believe in Making Lives Better.\n\nThe IT Specialist provides reliable day-to-day IT services.\n\nReport job"),
+  }, {
+    'script[type="application/ld+json"]': [],
+    'h1,h2,h3,h4,[role="heading"]': [],
+  });
+
+  const result = await extractorFor(document, "https://ca.indeed.com/viewjob?jk=example");
+  assert.equal(result.company, "Nurse Next Door");
+  assert.equal(result.role, "IT Specialist");
+  assert.equal(result.location, "1788 West 5th Avenue, Vancouver, BC V6J 1P2");
+  assert.match(result.description, /^At Nurse Next Door/);
+  assert.match(result.description, /reliable day-to-day IT services/);
+  assert.doesNotMatch(result.description, /Full job description|Report job/i);
+});
+
+test("finds Indeed's Full job description by its visible heading when selectors change", async () => {
+  const descriptionHeading = element("Full job description");
+  const firstParagraph = element("At Nurse Next Door, we believe in Making Lives Better and responsible technology adoption across our network.");
+  const secondParagraph = element("The IT Specialist provides reliable day-to-day IT services and coordinates technology initiatives.");
+  descriptionHeading.nextElementSibling = firstParagraph;
+  firstParagraph.nextElementSibling = secondParagraph;
+  const document = page({
+    "h1": element("IT Specialist"),
+    '[data-company-name="true"]': element("Nurse Next Door"),
+  }, {
+    'script[type="application/ld+json"]': [],
+    'h1,h2,h3,h4,[role="heading"]': [descriptionHeading],
+  });
+
+  const result = await extractorFor(document, "https://ca.indeed.com/viewjob?jk=changed-markup");
+  assert.match(result.description, /^At Nurse Next Door/);
+  assert.match(result.description, /coordinates technology initiatives/);
+});
+
 test("keeps structured JobPosting extraction as the generic fallback", async () => {
   const jsonLd = element(JSON.stringify({
     "@context": "https://schema.org",
@@ -100,11 +139,11 @@ test("keeps structured JobPosting extraction as the generic fallback", async () 
   assert.match(result.description, /troubleshoot cloud services/);
 });
 
-test("loads the dedicated extractor in extension version 1.1.1", async () => {
+test("loads the dedicated extractor in extension version 1.1.2", async () => {
   const [popup, manifestText] = await Promise.all([
     readFile(new URL("../extensions/applitrail-job-importer/popup.html", import.meta.url), "utf8"),
     readFile(new URL("../extensions/applitrail-job-importer/manifest.json", import.meta.url), "utf8"),
   ]);
   assert.ok(popup.indexOf('src="extract-job-posting.js"') < popup.indexOf('src="popup.js"'));
-  assert.equal(JSON.parse(manifestText).version, "1.1.1");
+  assert.equal(JSON.parse(manifestText).version, "1.1.2");
 });
