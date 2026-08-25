@@ -1,2 +1,37 @@
 export const metadata = { title: "Privacy | AppliTrail" };
-export default function PrivacyPage(){return <main className="legal-page"><a className="legal-brand" href="/">← AppliTrail</a><article><p className="eyebrow">PRIVACY</p><h1>Your career information is personal.</h1><p>AppliTrail stores your account identity, Master CV profiles, application records, uploaded resumes, generated documents, reminder settings, AI usage, plan details, billing-event history and sign-in visit metadata so the service can provide its features across your devices.</p><h2>How information is used</h2><p>Your information is used to save your dashboard, extract editable information from an uploaded CV when requested, generate career materials, show reminders, enforce account allowances, maintain subscription and credit balances, provide support and protect the service from misuse. It is not made visible to other AppliTrail users.</p><h2>Sign-in providers</h2><p>On the current hosted version, Google, email and ChatGPT sign-in are handled by the secure ChatGPT account gateway. AppliTrail receives the resulting account identifier, email address and available display name. AppliTrail does not receive or store your Google or ChatGPT password.</p><h2>Administrator access</h2><p>The AppliTrail administrator can see account identity, access and plan status, AI credit activity, test payment events, and the time and browser or device description recorded when a signed-in user opens AppliTrail. AppliTrail does not collect account passwords, IP addresses or OpenAI security information for this audit. The administrator dashboard does not display users’ CVs, job descriptions, applications or generated documents.</p><h2>Payments</h2><p>Stripe hosts payment entry and handles card or supported local payment information; AppliTrail does not store full payment-card details. AppliTrail stores the selected plan or credit quantity, confirmed amount and currency, payment reference, status and timestamp. In test mode no real payment is collected. Stripe may use a customer’s approximate location and billing information to localize currency, taxes and available payment methods.</p><h2>AI processing</h2><p>When you confirm CV extraction, the uploaded CV is sent to the configured OpenAI API to organize it into editable fields. When you request a tailored CV, cover letter, phone brief or interview preparation, the relevant job description and selected Master CV evidence are sent for that request.</p><h2>Files and account deletion</h2><p>Uploaded resumes are stored privately. A newly uploaded CV is not added to the Master CV library until you review and save it. You can remove individual files, export your structured account data or permanently delete your account data from the Account page.</p><h2>Your responsibility</h2><p>Review extracted and generated materials before use. Do not upload information you are not authorized to process. This notice may be updated as AppliTrail’s services and legal requirements develop.</p><p className="legal-updated">Effective August 23, 2026</p></article></main>}
+
+export default function PrivacyPage() {
+  return <main className="legal-page">
+    <a className="legal-brand" href="/">← AppliTrail</a>
+    <article>
+      <p className="eyebrow">PRIVACY</p>
+      <h1>Your career information is personal.</h1>
+      <p>AppliTrail stores your account identity, Master CV profiles, application records, uploaded resumes, generated documents, reminder settings, AI usage, plan details, billing-event history and sign-in visit metadata so the service can provide its features across your devices.</p>
+
+      <h2>How information is used</h2>
+      <p>Your information is used to save your dashboard, extract editable information from an uploaded CV when requested, generate career materials, show reminders, enforce account allowances, maintain subscription and credit balances, provide support and protect the service from misuse. It is not made visible to other AppliTrail users.</p>
+
+      <h2>Browser extension</h2>
+      <p>The optional AppliTrail Job Importer reads the active webpage only after you click its capture button. It extracts visible job-ad details and temporarily holds them in the browser while opening AppliTrail for review. Nothing becomes an application record until you confirm it. The extension does not submit applications, read your CV library or send information to an employer.</p>
+
+      <h2>Sign-in providers</h2>
+      <p>On the current hosted version, Google, email and ChatGPT sign-in are handled by the secure ChatGPT account gateway. AppliTrail receives the resulting account identifier, email address and available display name. AppliTrail does not receive or store your Google or ChatGPT password.</p>
+
+      <h2>Administrator access</h2>
+      <p>The AppliTrail administrator can see account identity, access and plan status, AI credit activity, test payment events, and the time and browser or device description recorded when a signed-in user opens AppliTrail. AppliTrail does not collect account passwords, IP addresses or OpenAI security information for this audit. The administrator dashboard does not display users’ CVs, job descriptions, applications or generated documents.</p>
+
+      <h2>Payments</h2>
+      <p>Stripe hosts payment entry and handles card or supported local payment information; AppliTrail does not store full payment-card details. AppliTrail stores the selected plan or credit quantity, confirmed amount and currency, payment reference, status and timestamp. In test mode no real payment is collected. Stripe may use a customer’s approximate location and billing information to localize currency, taxes and available payment methods.</p>
+
+      <h2>AI processing</h2>
+      <p>When you confirm CV extraction, the uploaded CV is sent to the configured OpenAI API to organize it into editable fields. When you request a tailored CV, cover letter, phone brief or interview preparation, the relevant job description and selected Master CV evidence are sent for that request.</p>
+
+      <h2>Files and account deletion</h2>
+      <p>Uploaded resumes are stored privately. A newly uploaded CV is not added to the Master CV library until you review and save it. You can remove individual files, export your structured account data or permanently delete your account data from the Account page.</p>
+
+      <h2>Your responsibility</h2>
+      <p>Review extracted and generated materials before use. Do not upload information you are not authorized to process. This notice may be updated as AppliTrail’s services and legal requirements develop.</p>
+      <p className="legal-updated">Effective August 25, 2026</p>
+    </article>
+  </main>;
+}

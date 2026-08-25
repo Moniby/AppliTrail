@@ -57,6 +57,19 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
   assert.match(landingSource, /href="\/signin"/);
 });
 
+test("server-renders the browser extension installation guide", async () => {
+  const response = await render("/extension");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<title>Browser Extension \| AppliTrail<\/title>/i);
+  assert.match(html, /Save a job ad without starting from scratch/i);
+  assert.match(html, /Download for Chrome &amp; Edge/i);
+  assert.match(html, /chrome:\/\/extensions/i);
+  assert.match(html, /edge:\/\/extensions/i);
+  assert.match(html, /Load unpacked/i);
+  assert.match(html, /Runs only when you click it/i);
+});
+
 test("uses the approved AppliTrail logo across public and account surfaces", async () => {
   const [landing, signIn, dashboard, layout] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -229,6 +242,11 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /BROWSER JOB IMPORT/);
   assert.match(dashboard, /Review this opportunity/);
   assert.match(dashboard, /Job imported from your browser/);
+  assert.match(dashboard, /Save jobs directly from your browser/);
+  assert.match(dashboard, /Don’t show this again/);
+  assert.match(dashboard, /Import from browser/);
+  assert.match(dashboard, /Browser extension/);
+  assert.match(dashboard, /applitrail-extension-announcement-v1-/);
   assert.match(dashboard, /Master CV Name/);
   assert.match(dashboard, /Technical tools & technologies/);
   assert.match(dashboard, /Custom section/);
