@@ -21,6 +21,8 @@ test("server-renders the public AppliTrail launch page", async () => {
   assert.match(html, /<title>AppliTrail \| Job Application Studio<\/title>/i);
   assert.match(html, /Move every job application forward with confidence/i);
   assert.match(html, /Google sign-in available/i);
+  assert.match(html, /Download the Chrome &amp; Edge extension/i);
+  assert.match(html, /Can I save a job directly from a job board/i);
   assert.match(html, /Private by design/i);
   assert.match(html, /Professional Word and PDF CV formats/i);
   assert.match(html, /Track up to 3 applications/i);
@@ -223,6 +225,10 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Review your CV/);
   assert.match(dashboard, /Upload & extract CV/);
   assert.match(dashboard, /Save Master CV/);
+  assert.match(dashboard, /APPLITRAIL_JOB_IMPORT/);
+  assert.match(dashboard, /BROWSER JOB IMPORT/);
+  assert.match(dashboard, /Review this opportunity/);
+  assert.match(dashboard, /Job imported from your browser/);
   assert.match(dashboard, /Master CV Name/);
   assert.match(dashboard, /Technical tools & technologies/);
   assert.match(dashboard, /Custom section/);
