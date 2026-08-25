@@ -56,6 +56,31 @@ test("extracts the selected LinkedIn job instead of the search-results page", as
   assert.equal(result.url, "https://www.linkedin.com/jobs/view/4450622327");
 });
 
+test("finds About the job semantically when LinkedIn class selectors change", async () => {
+  const header = element("Desktop Support Analyst - Ottawa | Magnet Forensics\nMagnet Forensics\nOttawa, ON · 2 weeks ago\nOn-site\nFull-time");
+  const title = element("Desktop Support Analyst - Ottawa | Magnet Forensics");
+  title.parentElement = header;
+  const aboutHeading = element("About the job");
+  aboutHeading.nextElementSibling = element("Who We Are; What We Do; Where We’re Going\n\nMagnet Forensics is a global leader in digital investigative software.\n\nRole Summary\nThe Desktop Support Analyst provides day-to-day support to employees.");
+  const document = page({
+    'h1[class*="job-title"]': title,
+    'a[href*="/company/"]': element("Magnet Forensics"),
+  }, {
+    'script[type="application/ld+json"]': [],
+    'h1,h2,h3,h4,[role="heading"]': [title, aboutHeading],
+  });
+  document.body = element("Search results\nAbout the job\nFallback body copy that should not be needed.");
+
+  const result = await extractorFor(document, "https://www.linkedin.com/jobs/search-results/?currentJobId=4450622327");
+  assert.equal(result.company, "Magnet Forensics");
+  assert.equal(result.role, "Desktop Support Analyst - Ottawa");
+  assert.equal(result.location, "Ottawa, ON");
+  assert.equal(result.positionType, "Full-time");
+  assert.equal(result.locationType, "Onsite");
+  assert.match(result.description, /^Who We Are; What We Do/);
+  assert.match(result.description, /Role Summary/);
+});
+
 test("keeps structured JobPosting extraction as the generic fallback", async () => {
   const jsonLd = element(JSON.stringify({
     "@context": "https://schema.org",
@@ -75,11 +100,11 @@ test("keeps structured JobPosting extraction as the generic fallback", async () 
   assert.match(result.description, /troubleshoot cloud services/);
 });
 
-test("loads the dedicated extractor in extension version 1.1", async () => {
+test("loads the dedicated extractor in extension version 1.1.1", async () => {
   const [popup, manifestText] = await Promise.all([
     readFile(new URL("../extensions/applitrail-job-importer/popup.html", import.meta.url), "utf8"),
     readFile(new URL("../extensions/applitrail-job-importer/manifest.json", import.meta.url), "utf8"),
   ]);
   assert.ok(popup.indexOf('src="extract-job-posting.js"') < popup.indexOf('src="popup.js"'));
-  assert.equal(JSON.parse(manifestText).version, "1.1.0");
+  assert.equal(JSON.parse(manifestText).version, "1.1.1");
 });

@@ -14,4 +14,4 @@ The extension uses the current tab only after the user presses the capture butto
 
 ## LinkedIn job pages
 
-Version 1.1 prioritizes the currently selected LinkedIn job panel. It captures the company and title from the job header, the location and workplace/employment labels shown with that job, and the description from **About the job**. Search results and search keywords are excluded from workplace-type detection. LinkedIn tracking parameters are also removed from the saved job link when a job ID is available.
+Version 1.1.1 prioritizes the currently selected LinkedIn job panel. It captures the company and title from the job header, the location and workplace/employment labels shown with that job, and locates the visible **About the job** heading even when LinkedIn changes its CSS class names. Search results and search keywords are excluded from workplace-type detection. LinkedIn tracking parameters are also removed from the saved job link when a job ID is available.

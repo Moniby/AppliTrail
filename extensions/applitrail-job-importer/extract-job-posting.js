@@ -27,6 +27,16 @@
       }
       return "";
     };
+    const pickNodeWithin = (scopes, selectors) => {
+      for (const currentScope of scopes) {
+        if (!currentScope?.querySelector) continue;
+        for (const selector of selectors) {
+          const node = currentScope.querySelector(selector);
+          if (node && nodeText(node)) return node;
+        }
+      }
+      return null;
+    };
     const collectWithin = (scopes, selectors) => {
       const values = [];
       for (const currentScope of scopes) {
@@ -63,15 +73,16 @@
       || document.querySelector('[class*="jobs-unified-top-card"]')
     ) : null;
     const linkedInScopes = topCard ? [topCard, document] : [document];
-
-    let title = isLinkedIn ? pickWithin(linkedInScopes, [
+    const linkedInTitleSelectors = [
       ".job-details-jobs-unified-top-card__job-title h1",
       ".job-details-jobs-unified-top-card__job-title",
       ".jobs-unified-top-card__job-title h1",
       ".jobs-unified-top-card__job-title",
       'h1[class*="job-title"]',
       ".top-card-layout__title",
-    ], 300) : "";
+    ];
+    const linkedInTitleNode = isLinkedIn ? pickNodeWithin(linkedInScopes, linkedInTitleSelectors) : null;
+    let title = nodeText(linkedInTitleNode, 300);
     let company = isLinkedIn ? pickWithin(linkedInScopes, [
       ".job-details-jobs-unified-top-card__company-name a",
       ".job-details-jobs-unified-top-card__company-name",
@@ -89,13 +100,54 @@
       ".description__text",
       '[class*="jobs-description__content"]',
     ], 40000, true) : "";
-    if (isLinkedIn) description = description.replace(/^About the job\s*/i, "").trim();
+    const cleanLinkedInDescription = (value) => {
+      let cleaned = tidyDescription(value, 60000);
+      const aboutIndex = cleaned.toLowerCase().lastIndexOf("about the job");
+      if (aboutIndex >= 0) cleaned = cleaned.slice(aboutIndex + "about the job".length).trim();
+      const endMarkers = ["About the company", "Set alert for similar jobs", "Similar jobs", "People also viewed", "Show more jobs"];
+      let end = cleaned.length;
+      for (const marker of endMarkers) {
+        const markerIndex = cleaned.toLowerCase().indexOf(`\n${marker.toLowerCase()}`);
+        if (markerIndex >= 0 && markerIndex < end) end = markerIndex;
+      }
+      return cleaned.slice(0, end).replace(/^Show more\s*/i, "").replace(/\s*Show less$/i, "").trim().slice(0, 40000);
+    };
+    if (isLinkedIn) {
+      description = cleanLinkedInDescription(description);
+      if (!description) {
+        const aboutHeading = [...document.querySelectorAll('h1,h2,h3,h4,[role="heading"]')]
+          .find((node) => /^about the job$/i.test(nodeText(node, 100)));
+        const candidates = [];
+        if (aboutHeading?.nextElementSibling) candidates.push(aboutHeading.nextElementSibling);
+        if (aboutHeading?.parentElement?.nextElementSibling) candidates.push(aboutHeading.parentElement.nextElementSibling);
+        let ancestor = aboutHeading?.parentElement || null;
+        for (let depth = 0; ancestor && depth < 5; depth += 1, ancestor = ancestor.parentElement) candidates.push(ancestor);
+        for (const candidate of candidates) {
+          const value = cleanLinkedInDescription(nodeText(candidate, 60000, true));
+          if (value.length >= 80) { description = value; break; }
+        }
+      }
+      if (!description) {
+        const bodyText = nodeText(document.body, 100000, true);
+        if (/about the job/i.test(bodyText)) description = cleanLinkedInDescription(bodyText);
+      }
+    }
 
     const organization = jsonLd?.hiringOrganization;
     if (!title) title = tidy(jsonLd?.title || pickWithin([document], ["h1", 'meta[property="og:title"]', "title"], 300), 300);
     if (isLinkedIn) title = title.replace(/\s*[|·-]\s*LinkedIn\s*$/i, "").trim();
     if (!company) company = tidy(typeof organization === "object" ? organization?.name : organization || pickWithin([document], ['[data-testid*="company"]', '[class*="company"]', '[class*="employer"]'], 300), 300);
+    if (isLinkedIn && company && title.toLowerCase().endsWith(`| ${company}`.toLowerCase())) title = title.slice(0, -company.length - 2).trim();
     if (!description) description = tidyDescription(jsonLd?.description || pickWithin([document], ['[data-testid*="description"]', '[class*="job-description"]', '[id*="job-description"]', "main article"], 40000, true), 40000);
+
+    let headerContext = topCard ? nodeText(topCard, 5000, true) : "";
+    if (isLinkedIn && !headerContext && linkedInTitleNode) {
+      let ancestor = linkedInTitleNode.parentElement;
+      for (let depth = 0; ancestor && depth < 6; depth += 1, ancestor = ancestor.parentElement) {
+        const value = nodeText(ancestor, 5000, true);
+        if (value.length > title.length && /\b(?:remote|hybrid|on[ -]?site|full[ -]?time|part[ -]?time|contract)\b/i.test(value)) { headerContext = value; break; }
+      }
+    }
 
     const locationValue = Array.isArray(jsonLd?.jobLocation) ? jsonLd.jobLocation[0] : jsonLd?.jobLocation;
     const structuredLocation = typeof locationValue === "object"
@@ -107,6 +159,11 @@
       ".jobs-unified-top-card__bullet",
       ".topcard__flavor--bullet",
     ], 500) : "";
+    if (isLinkedIn && !locationText && headerContext) {
+      const locationLine = headerContext.split("\n").map((line) => tidy(line, 500)).find((line) => /,\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland|Canada|United States)\b/.test(line) && !/\b(?:ago|applicants?|clicked apply)\b/i.test(line));
+      if (locationLine) locationText = locationLine;
+      else locationText = headerContext.match(/\b([A-Z][A-Za-z.' -]{1,45},\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland|Canada|United States))(?=\s*[·•]|\n|$)/)?.[1] || "";
+    }
     if (isLinkedIn && locationText) locationText = locationText.split(/\s+[·•]\s+/)[0].trim();
     const jobLocation = tidy(locationText || structuredLocation || pickWithin([document], ['[data-testid*="location"]', '[class*="location"]'], 500), 500);
 
@@ -119,14 +176,14 @@
       ".job-details-preferences-and-skills button",
       ".job-details-preferences-and-skills span",
     ]) : "";
-    const employment = tidy(jsonLd?.employmentType || linkedInMetadata, 1000).toLowerCase();
+    const employment = tidy(jsonLd?.employmentType || linkedInMetadata || headerContext, 5000).toLowerCase();
     const positionType = /\bcontract(?:or)?\b/.test(employment) ? "Contract"
       : /\bpart[ -]?time\b/.test(employment) ? "Part-time"
       : /\bintern(?:ship)?\b/.test(employment) ? "Internship"
       : /\bvolunteer\b/.test(employment) ? "Volunteer"
       : /\bfull[ -]?time\b/.test(employment) ? "Full-time"
       : "";
-    const workplaceEvidence = isLinkedIn ? linkedInMetadata.toLowerCase() : `${title} ${description}`.toLowerCase();
+    const workplaceEvidence = isLinkedIn ? (linkedInMetadata || headerContext).toLowerCase() : `${title} ${description}`.toLowerCase();
     const locationType = /\bremote\b/.test(workplaceEvidence) ? "Remote"
       : /\bhybrid\b/.test(workplaceEvidence) ? "Hybrid"
       : /\bon[ -]?site\b|\bin[ -]?office\b/.test(workplaceEvidence) ? "Onsite"
