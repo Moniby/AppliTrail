@@ -64,8 +64,8 @@ test("server-renders the browser extension installation guide", async () => {
   assert.match(html, /<title>Browser Extension \| AppliTrail<\/title>/i);
   assert.match(html, /Save a job ad without starting from scratch/i);
   assert.match(html, /Download for Chrome &amp; Edge/i);
-  assert.match(html, /VERSION 1\.1\.4/i);
-  assert.match(html, /applitrail-job-importer-v1\.1\.4\.zip/i);
+  assert.match(html, /VERSION 1\.1\.5/i);
+  assert.match(html, /applitrail-job-importer-v1\.1\.5\.zip/i);
   assert.match(html, /select Reload on your browser’s extensions page/i);
   assert.match(html, /chrome:\/\/extensions/i);
   assert.match(html, /edge:\/\/extensions/i);

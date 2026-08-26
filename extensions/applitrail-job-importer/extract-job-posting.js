@@ -224,6 +224,41 @@
     const linkedInHeaderEvidence = isLinkedIn
       ? tidyDescription([headerContext, linkedInSemanticHeaderContext].filter(Boolean).join("\n"), 25000)
       : "";
+    const linkedInLeadEvidence = (() => {
+      if (!isLinkedIn || !title || !document.body) return "";
+      const bodyText = nodeText(document.body, 160000, true);
+      const lowerBody = bodyText.toLowerCase();
+      const lowerTitle = title.toLowerCase();
+      const candidates = [];
+      let searchFrom = 0;
+      while (searchFrom < lowerBody.length) {
+        const start = lowerBody.indexOf(lowerTitle, searchFrom);
+        if (start < 0) break;
+        let candidate = bodyText.slice(start, start + 16000);
+        const boundaryPatterns = [
+          /\nabout the job\b/i,
+          /\njob description\b/i,
+          /\npeople you can reach out to\b/i,
+          /\nmeet the hiring team\b/i,
+        ];
+        let boundary = candidate.length;
+        for (const pattern of boundaryPatterns) {
+          const match = pattern.exec(candidate);
+          if (match && match.index > lowerTitle.length && match.index < boundary) boundary = match.index;
+        }
+        candidate = tidyDescription(candidate.slice(0, boundary), 16000);
+        const score = [
+          /(?:CA|US|AU|NZ)?\$\s*\d[\d,.]*[KkMm]?(?:\s*(?:CAD|USD|GBP|EUR|AUD|NZD))?\s*\/\s*(?:yr|year|hr|hour|mo|month|wk|week)/i,
+          /\b(?:remote|hybrid|on[ -]?site|in[ -]?office)\b/i,
+          /\b(?:full[ -]?time|part[ -]?time|contract(?:or)?|internship|volunteer)\b/i,
+          /\b[A-Z][A-Za-z.' -]{1,45},\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland)(?:,\s*(?:Canada|United States))?\b/,
+        ].reduce((total, pattern) => total + Number(pattern.test(candidate)), 0);
+        if (score) candidates.push({ candidate, score });
+        searchFrom = start + lowerTitle.length;
+      }
+      candidates.sort((left, right) => right.score - left.score || left.candidate.length - right.candidate.length);
+      return candidates[0]?.candidate || "";
+    })();
 
     const locationValue = Array.isArray(jsonLd?.jobLocation) ? jsonLd.jobLocation[0] : jsonLd?.jobLocation;
     const structuredLocation = typeof locationValue === "object"
@@ -235,11 +270,17 @@
       ".jobs-unified-top-card__bullet",
       ".topcard__flavor--bullet",
     ], 500) : "";
-    if (isLinkedIn && !locationText && linkedInHeaderEvidence) {
-      const locationLine = linkedInHeaderEvidence.split("\n").map((line) => tidy(line, 500)).find((line) => /,\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland|Canada|United States)\b/.test(line) && !/\b(?:ago|applicants?|clicked apply)\b/i.test(line));
+    const linkedInLocationEvidence = tidyDescription([linkedInHeaderEvidence, linkedInLeadEvidence].filter(Boolean).join("\n"), 30000);
+    if (isLinkedIn && !locationText && linkedInLocationEvidence) {
+      const locationLine = linkedInLocationEvidence
+        .split(/\n|\s+[·•]\s+/)
+        .map((line) => tidy(line, 500))
+        .map((line) => company && line.toLowerCase().startsWith(company.toLowerCase()) ? line.slice(company.length).trim() : line)
+        .map((line) => line.replace(/^[·•\s]+/, ""))
+        .find((line) => /^[A-Z][A-Za-z.' -]{1,45},\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland)(?:,\s*(?:Canada|United States))?$/i.test(line));
       if (locationLine) locationText = locationLine;
-      else locationText = linkedInHeaderEvidence.match(/\b([A-Z][A-Za-z.' -]{1,45},\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland|Canada|United States))(?=\s*[·•]|\n|$)/)?.[1]
-        || linkedInHeaderEvidence.match(/(?:^|\n)(Canada|United States|United Kingdom|Australia|Remote)(?=\s*[·•]|\n|$)/i)?.[1]
+      else locationText = linkedInLocationEvidence.match(/\b([A-Z][A-Za-z.' -]{1,45},\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland)(?:,\s*(?:Canada|United States))?)(?=\s*[·•]|\n|$)/)?.[1]
+        || linkedInLocationEvidence.match(/(?:^|\n)(Canada|United States|United Kingdom|Australia|Remote)(?=\s*[·•]|\n|$)/i)?.[1]
         || "";
     }
     if (isLinkedIn && locationText) locationText = locationText.split(/\s+[·•]\s+/)[0].trim();
@@ -266,7 +307,7 @@
       ".description__job-criteria-list",
       '[class*="job-criteria"]',
     ]) : "";
-    const linkedInCardEvidence = isLinkedIn ? tidyDescription([linkedInHeaderEvidence, linkedInMetadata].filter(Boolean).join("\n"), 30000) : "";
+    const linkedInCardEvidence = isLinkedIn ? tidyDescription([linkedInHeaderEvidence, linkedInLeadEvidence, linkedInMetadata].filter(Boolean).join("\n"), 45000) : "";
     const employment = tidy([jsonLd?.employmentType, linkedInCardEvidence].filter(Boolean).join(" "), 5000).toLowerCase();
     const positionType = /\bcontract(?:or)?\b/.test(employment) ? "Contract"
       : /\bpart[ -]?time\b/.test(employment) ? "Part-time"

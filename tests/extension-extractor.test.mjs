@@ -225,11 +225,31 @@ test("keeps structured JobPosting extraction as the generic fallback", async () 
   assert.match(result.description, /troubleshoot cloud services/);
 });
 
-test("loads the dedicated extractor in extension version 1.1.4", async () => {
+test("extracts LinkedIn details from a title-anchored visible header without stable classes", async () => {
+  const topCard = element("HighlightTA\nIT Support Specialist", {
+    ".job-details-jobs-unified-top-card__job-title h1": element("IT Support Specialist"),
+    ".job-details-jobs-unified-top-card__company-name a": element("HighlightTA"),
+  });
+  const document = page({
+    ".job-details-jobs-unified-top-card": topCard,
+    "#job-details": element("About the job\nAbout StickerYou\nProvide day-to-day IT support."),
+  }, {
+    'script[type="application/ld+json"]': [],
+  });
+  document.body = element("Search jobs\nIT Support Specialist\nHighlightTA\nToronto, ON · 4 days ago · Over 100 people clicked apply\n55K CAD/yr - 65K CAD/yr\nHybrid\nFull-time\nApply\nSave\nYour profile and resume match\nAbout the job\nAbout StickerYou");
+
+  const result = await extractorFor(document, "https://www.linkedin.com/jobs/view/4457391025");
+  assert.equal(result.location, "Toronto, ON");
+  assert.equal(result.salary, "55K CAD/yr - 65K CAD/yr");
+  assert.equal(result.locationType, "Hybrid");
+  assert.equal(result.positionType, "Full-time");
+});
+
+test("loads the dedicated extractor in extension version 1.1.5", async () => {
   const [popup, manifestText] = await Promise.all([
     readFile(new URL("../extensions/applitrail-job-importer/popup.html", import.meta.url), "utf8"),
     readFile(new URL("../extensions/applitrail-job-importer/manifest.json", import.meta.url), "utf8"),
   ]);
   assert.ok(popup.indexOf('src="extract-job-posting.js"') < popup.indexOf('src="popup.js"'));
-  assert.equal(JSON.parse(manifestText).version, "1.1.4");
+  assert.equal(JSON.parse(manifestText).version, "1.1.5");
 });
