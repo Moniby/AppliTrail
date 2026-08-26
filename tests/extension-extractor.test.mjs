@@ -81,6 +81,49 @@ test("finds About the job semantically when LinkedIn class selectors change", as
   assert.match(result.description, /Role Summary/);
 });
 
+test("captures salary and employment details from the selected LinkedIn job card", async () => {
+  const topCard = element("OpenAI\nAI Support Engineer - Toronto\nCanada · 1 week ago · Over 100 people clicked apply\n261K CAD/yr - 290K CAD/yr\nRemote\nFull-time", {
+    ".job-details-jobs-unified-top-card__job-title h1": element("AI Support Engineer - Toronto"),
+    ".job-details-jobs-unified-top-card__company-name a": element("OpenAI"),
+    ".job-details-jobs-unified-top-card__primary-description-container": element("Canada · 1 week ago · Over 100 people clicked apply"),
+  }, {
+    ".job-details-jobs-unified-top-card__job-insight": [element("261K CAD/yr - 290K CAD/yr")],
+  });
+  const document = page({
+    ".job-details-jobs-unified-top-card": topCard,
+    "#job-details": element("About the job\nSupport customers using OpenAI products and resolve technical issues."),
+  }, {
+    'script[type="application/ld+json"]': [],
+  });
+
+  const result = await extractorFor(document, "https://www.linkedin.com/jobs/view/1234567890");
+  assert.equal(result.company, "OpenAI");
+  assert.equal(result.role, "AI Support Engineer - Toronto");
+  assert.equal(result.location, "Canada");
+  assert.equal(result.salary, "261K CAD/yr - 290K CAD/yr");
+  assert.equal(result.locationType, "Remote");
+  assert.equal(result.positionType, "Full-time");
+});
+
+test("captures dollar salary and hybrid type from a LinkedIn job card", async () => {
+  const topCard = element("LTM\nMS 365 Support Engineer\nBellevue, WA · Reposted 1 month ago\n$60K/yr - $65K/yr\nHybrid\nFull-time", {
+    ".job-details-jobs-unified-top-card__job-title h1": element("MS 365 Support Engineer"),
+    ".job-details-jobs-unified-top-card__company-name a": element("LTM"),
+  });
+  const document = page({
+    ".job-details-jobs-unified-top-card": topCard,
+    "#job-details": element("About the job\nProvide Microsoft 365 support to business users."),
+  }, {
+    'script[type="application/ld+json"]': [],
+  });
+
+  const result = await extractorFor(document, "https://www.linkedin.com/jobs/view/2234567890");
+  assert.equal(result.location, "Bellevue, WA");
+  assert.equal(result.salary, "$60K/yr - $65K/yr");
+  assert.equal(result.locationType, "Hybrid");
+  assert.equal(result.positionType, "Full-time");
+});
+
 test("extracts Indeed's Full job description section", async () => {
   const document = page({
     '[data-testid="jobsearch-JobInfoHeader-title"]': element("IT Specialist"),
@@ -139,11 +182,11 @@ test("keeps structured JobPosting extraction as the generic fallback", async () 
   assert.match(result.description, /troubleshoot cloud services/);
 });
 
-test("loads the dedicated extractor in extension version 1.1.2", async () => {
+test("loads the dedicated extractor in extension version 1.1.3", async () => {
   const [popup, manifestText] = await Promise.all([
     readFile(new URL("../extensions/applitrail-job-importer/popup.html", import.meta.url), "utf8"),
     readFile(new URL("../extensions/applitrail-job-importer/manifest.json", import.meta.url), "utf8"),
   ]);
   assert.ok(popup.indexOf('src="extract-job-posting.js"') < popup.indexOf('src="popup.js"'));
-  assert.equal(JSON.parse(manifestText).version, "1.1.2");
+  assert.equal(JSON.parse(manifestText).version, "1.1.3");
 });

@@ -223,7 +223,9 @@
     if (isLinkedIn && !locationText && headerContext) {
       const locationLine = headerContext.split("\n").map((line) => tidy(line, 500)).find((line) => /,\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland|Canada|United States)\b/.test(line) && !/\b(?:ago|applicants?|clicked apply)\b/i.test(line));
       if (locationLine) locationText = locationLine;
-      else locationText = headerContext.match(/\b([A-Z][A-Za-z.' -]{1,45},\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland|Canada|United States))(?=\s*[·•]|\n|$)/)?.[1] || "";
+      else locationText = headerContext.match(/\b([A-Z][A-Za-z.' -]{1,45},\s*(?:[A-Z]{2}|Ontario|Quebec|British Columbia|Alberta|Manitoba|Saskatchewan|Nova Scotia|New Brunswick|Newfoundland|Canada|United States))(?=\s*[·•]|\n|$)/)?.[1]
+        || headerContext.match(/(?:^|\n)(Canada|United States|United Kingdom|Australia|Remote)(?=\s*[·•]|\n|$)/i)?.[1]
+        || "";
     }
     if (isLinkedIn && locationText) locationText = locationText.split(/\s+[·•]\s+/)[0].trim();
     const jobLocation = tidy(locationText || structuredLocation || pickWithin([document], isIndeed ? [
@@ -243,14 +245,15 @@
       ".job-details-preferences-and-skills button",
       ".job-details-preferences-and-skills span",
     ]) : "";
-    const employment = tidy(jsonLd?.employmentType || linkedInMetadata || headerContext, 5000).toLowerCase();
+    const linkedInCardEvidence = isLinkedIn ? tidyDescription([headerContext, linkedInMetadata].filter(Boolean).join("\n"), 10000) : "";
+    const employment = tidy([jsonLd?.employmentType, linkedInCardEvidence].filter(Boolean).join(" "), 5000).toLowerCase();
     const positionType = /\bcontract(?:or)?\b/.test(employment) ? "Contract"
       : /\bpart[ -]?time\b/.test(employment) ? "Part-time"
       : /\bintern(?:ship)?\b/.test(employment) ? "Internship"
       : /\bvolunteer\b/.test(employment) ? "Volunteer"
       : /\bfull[ -]?time\b/.test(employment) ? "Full-time"
       : "";
-    const workplaceEvidence = isLinkedIn ? (linkedInMetadata || headerContext).toLowerCase() : `${title} ${description}`.toLowerCase();
+    const workplaceEvidence = isLinkedIn ? linkedInCardEvidence.toLowerCase() : `${title} ${description}`.toLowerCase();
     const locationType = /\bremote\b/.test(workplaceEvidence) ? "Remote"
       : /\bhybrid\b/.test(workplaceEvidence) ? "Hybrid"
       : /\bon[ -]?site\b|\bin[ -]?office\b/.test(workplaceEvidence) ? "Onsite"
@@ -260,7 +263,14 @@
     const salaryRange = typeof salaryValue === "object"
       ? [salaryValue?.minValue, salaryValue?.maxValue].filter((value) => value !== undefined && value !== null).join("–")
       : salaryValue;
-    const salary = tidy([jsonLd?.baseSalary?.currency, salaryRange, salaryValue?.unitText].filter(Boolean).join(" ") || pickWithin(linkedInScopes, ['[class*="salary"]'], 200), 200);
+    const salaryCurrencyPattern = String.raw`(?:CAD|USD|GBP|EUR|AUD|NZD)`;
+    const salaryAmountPattern = String.raw`(?:${salaryCurrencyPattern}\s*)?\$?\d[\d,.]*(?:\.\d+)?[KkMm]?(?:\s*${salaryCurrencyPattern})?(?:\s*\/\s*(?:yr|year|hr|hour|mo|month|wk|week))?`;
+    const linkedInCardSalary = isLinkedIn
+      ? pickWithin(linkedInScopes, ['[class*="salary"]'], 200)
+        || linkedInCardEvidence.match(new RegExp(`${salaryAmountPattern}\\s*(?:-|–|—|to)\\s*${salaryAmountPattern}`, "i"))?.[0]
+        || ""
+      : "";
+    const salary = tidy([jsonLd?.baseSalary?.currency, salaryRange, salaryValue?.unitText].filter(Boolean).join(" ") || linkedInCardSalary || pickWithin(linkedInScopes, ['[class*="salary"]'], 200), 200);
     let url = window.location.href;
     if (isLinkedIn) {
       const current = new URL(window.location.href);
