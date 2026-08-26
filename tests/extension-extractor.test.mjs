@@ -124,6 +124,49 @@ test("captures dollar salary and hybrid type from a LinkedIn job card", async ()
   assert.equal(result.positionType, "Full-time");
 });
 
+test("expands beyond LinkedIn's compact top card to capture visible preference chips", async () => {
+  const titleNode = element("IT Support Specialist");
+  const compactTopCard = element("HighlightTA\nIT Support Specialist", {
+    ".job-details-jobs-unified-top-card__job-title h1": titleNode,
+    ".job-details-jobs-unified-top-card__company-name a": element("HighlightTA"),
+  });
+  const selectedDetailPanel = element("HighlightTA\nIT Support Specialist\nToronto, ON · 4 days ago · Over 100 people clicked apply\n55K CAD/yr - 65K CAD/yr\nHybrid\nFull-time\nApply\nSave");
+  titleNode.parentElement = compactTopCard;
+  compactTopCard.parentElement = selectedDetailPanel;
+  const document = page({
+    ".job-details-jobs-unified-top-card": compactTopCard,
+    "#job-details": element("About the job\nAbout StickerYou\nProvide day-to-day IT support."),
+  }, {
+    'script[type="application/ld+json"]': [],
+  });
+
+  const result = await extractorFor(document, "https://www.linkedin.com/jobs/view/4457391025");
+  assert.equal(result.location, "Toronto, ON");
+  assert.equal(result.salary, "55K CAD/yr - 65K CAD/yr");
+  assert.equal(result.locationType, "Hybrid");
+  assert.equal(result.positionType, "Full-time");
+});
+
+test("captures LinkedIn's separate base-pay and employment-detail sections", async () => {
+  const topCard = element("IT Support Specialist\nHighlightTA\nToronto, Ontario, Canada", {
+    ".top-card-layout__title": element("IT Support Specialist"),
+    ".topcard__org-name-link": element("HighlightTA"),
+    ".topcard__flavor--bullet": element("Toronto, Ontario, Canada"),
+  });
+  const document = page({
+    ".top-card-layout": topCard,
+    ".compensation__salary-range": element("Base pay range\nCA$55,000.00/yr - CA$65,000.00/yr"),
+    ".description__text": element("About StickerYou\nProvide day-to-day IT support."),
+  }, {
+    'script[type="application/ld+json"]': [],
+    ".description__job-criteria-list": [element("Employment type\nFull-time")],
+  });
+
+  const result = await extractorFor(document, "https://www.linkedin.com/jobs/view/4457391025");
+  assert.equal(result.salary, "CA$55,000.00/yr - CA$65,000.00/yr");
+  assert.equal(result.positionType, "Full-time");
+});
+
 test("extracts Indeed's Full job description section", async () => {
   const document = page({
     '[data-testid="jobsearch-JobInfoHeader-title"]': element("IT Specialist"),
@@ -182,11 +225,11 @@ test("keeps structured JobPosting extraction as the generic fallback", async () 
   assert.match(result.description, /troubleshoot cloud services/);
 });
 
-test("loads the dedicated extractor in extension version 1.1.3", async () => {
+test("loads the dedicated extractor in extension version 1.1.4", async () => {
   const [popup, manifestText] = await Promise.all([
     readFile(new URL("../extensions/applitrail-job-importer/popup.html", import.meta.url), "utf8"),
     readFile(new URL("../extensions/applitrail-job-importer/manifest.json", import.meta.url), "utf8"),
   ]);
   assert.ok(popup.indexOf('src="extract-job-posting.js"') < popup.indexOf('src="popup.js"'));
-  assert.equal(JSON.parse(manifestText).version, "1.1.3");
+  assert.equal(JSON.parse(manifestText).version, "1.1.4");
 });
