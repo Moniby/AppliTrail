@@ -93,7 +93,7 @@ test("uses the approved AppliTrail logo across public and account surfaces", asy
 });
 
 test("declares portable account, database and file-storage boundaries", async () => {
-  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, stripeWebhookRoute, stripeBilling, dashboard, publicPricing, preparationDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration, stripeWebhookMigration, appSettingsMigration, rolloverMigration] = await Promise.all([
+  const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, stripeWebhookRoute, stripeBilling, dashboard, publicPricing, preparationDocx, coverLetterDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration, stripeWebhookMigration, appSettingsMigration, rolloverMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
@@ -108,6 +108,7 @@ test("declares portable account, database and file-storage boundaries", async ()
     readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/public-pricing.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/preparation-docx.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/cover-letter-docx.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/appliflow-store.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0001_free_bucky.sql", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0002_windy_rawhide_kid.sql", import.meta.url), "utf8"),
@@ -258,6 +259,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Upload &amp; extract/);
   assert.match(dashboard, /Download DOCX/);
   assert.match(dashboard, /await import\("\.\/preparation-docx"\)/);
+  assert.match(dashboard, /await import\("\.\/cover-letter-docx"\)/);
+  assert.match(coverLetterDocx, /Packer\.toBlob\(document\)/);
+  assert.match(coverLetterDocx, /Re: \$\{role\} at \$\{company\}/);
   assert.match(dashboard, /PreparationPreview/);
   assert.match(dashboard, /FORMATTED PREVIEW/);
   assert.match(dashboard, /Credit usage audit/i);
