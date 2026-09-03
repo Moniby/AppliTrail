@@ -238,7 +238,16 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /APPLICATION AGE/);
   assert.match(dashboard, /since application/);
   assert.match(dashboard, /generation-progress-bar/);
-  assert.match(dashboard, /actively comparing the saved job description/);
+  assert.match(dashboard, /Tailoring your CV/);
+  assert.match(dashboard, /Preparing your phone screen brief/);
+  assert.match(dashboard, /Preparing your interview practice/);
+  assert.match(dashboard, /AppliTrail will prepare a phone-screen brief/);
+  assert.match(dashboard, /AppliTrail will prepare role-specific interview questions/);
+  assert.match(dashboard, /Uses 1 AI credit when generated/);
+  assert.match(dashboard, /APPLITRAIL TAILORED CV CHECK/);
+  assert.doesNotMatch(dashboard, /Powered by GPT/);
+  assert.doesNotMatch(dashboard, /CHATGPT TAILORED CV CHECK/);
+  assert.doesNotMatch(dashboard, /Model & tokens/);
   assert.match(dashboard, /Review your CV/);
   assert.match(dashboard, /Upload & extract CV/);
   assert.match(dashboard, /Save Master CV/);

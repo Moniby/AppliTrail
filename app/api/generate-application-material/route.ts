@@ -172,8 +172,8 @@ function outputText(response: OpenAIResponse) {
 }
 
 function safeError(status: number, code = "", label = "application material") {
-  if (status === 401) return "OpenAI could not authenticate this request. The AppliTrail API key needs attention.";
-  if (status === 429 && code === "insufficient_quota") return "The OpenAI API project has no available credits or has reached its spending limit.";
+  if (status === 401) return "This preparation service is temporarily unavailable. Please contact AppliTrail support.";
+  if (status === 429 && code === "insufficient_quota") return "This preparation service is temporarily unavailable. Please try again later.";
   if (status === 429) return "The AI service is busy or rate-limited. Please wait briefly and try again.";
   if (status >= 500) return "The AI service is temporarily unavailable. Please try again.";
   return `The ${label} could not be generated. Please review the job description and try again.`;

@@ -64,8 +64,8 @@ function outputText(response: OpenAIResponse) {
 }
 
 function safeError(status: number, code = "") {
-  if (status === 401) return "OpenAI could not authenticate this request. The AppliTrail API key needs attention.";
-  if (status === 429 && code === "insufficient_quota") return "The OpenAI API project has no available credits or has reached its spending limit.";
+  if (status === 401) return "CV extraction is temporarily unavailable. Please contact AppliTrail support.";
+  if (status === 429 && code === "insufficient_quota") return "CV extraction is temporarily unavailable. Please try again later.";
   if (status === 429) return "The AI service is busy or rate-limited. Please wait briefly and try again.";
   if (status >= 500) return "The AI service is temporarily unavailable. Please try again.";
   return "The CV information could not be extracted. Try another PDF or DOCX file.";
