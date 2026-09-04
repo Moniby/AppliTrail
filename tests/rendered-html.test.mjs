@@ -141,7 +141,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /rejectionComment: 10_000/);
   assert.match(stateRoute, /interviewNotes: 20_000/);
   assert.match(stateRoute, /safe\.stageHistory = stageHistory\.length/);
-  assert.match(stateRoute, /schemaVersion: 8/);
+  assert.match(stateRoute, /schemaVersion: 9/);
+  assert.match(stateRoute, /APPLICATION_SOURCES/);
+  assert.match(stateRoute, /safe\.source/);
   assert.match(stateRoute, /safe\.customTasks/);
   assert.match(stateRoute, /hasPaidPlanFeatures\(account\.plan\)/);
   assert.match(stateRoute, /planResourceLimits\(account\.plan\)/);
@@ -224,6 +226,13 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Filter by stage/);
   assert.match(dashboard, /Sort by/);
   assert.match(dashboard, /Group by/);
+  assert.match(dashboard, /Application source/);
+  assert.match(dashboard, /POSSIBLE DUPLICATE/);
+  assert.match(dashboard, /findDuplicateApplication/);
+  assert.match(dashboard, /Success intelligence/);
+  assert.match(dashboard, /Results by application source/);
+  assert.match(dashboard, /Results by Master CV/);
+  assert.match(dashboard, /No AI credits used/);
   assert.match(dashboard, /Suspend/);
   assert.match(dashboard, /Monthly limit/);
   assert.match(dashboard, /action:"allowance"/);
