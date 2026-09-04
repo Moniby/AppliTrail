@@ -25,6 +25,7 @@ test("server-renders the public AppliTrail launch page", async () => {
   assert.match(html, /Can I save a job directly from a job board/i);
   assert.match(html, /Private by design/i);
   assert.match(html, /Professional Word and PDF CV formats/i);
+  assert.equal((html.match(/Browser extension job importer/g) ?? []).length, 3);
   assert.match(html, /Track up to 3 applications/i);
   assert.match(html, /Create up to 2 Master CVs/i);
   assert.match(html, /Unlimited application tracking/i);
@@ -65,6 +66,8 @@ test("server-renders the browser extension installation guide", async () => {
   assert.match(html, /Save a job ad without starting from scratch/i);
   assert.match(html, /Download for Chrome &amp; Edge/i);
   assert.match(html, /VERSION 1\.1\.5/i);
+  assert.match(html, /ALL PLANS/i);
+  assert.match(html, /included with Free, Basic and Standard/i);
   assert.match(html, /applitrail-job-importer-v1\.1\.5\.zip/i);
   assert.match(html, /select Reload on your browser’s extensions page/i);
   assert.match(html, /chrome:\/\/extensions/i);
@@ -259,6 +262,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Don’t show this again/);
   assert.match(dashboard, /Import from browser/);
   assert.match(dashboard, /Browser extension/);
+  assert.match(dashboard, /\[true,"Browser extension job importer"\]/);
   assert.match(dashboard, /applitrail-extension-announcement-v1-/);
   assert.match(dashboard, /Master CV Name/);
   assert.match(dashboard, /Technical tools & technologies/);
@@ -284,6 +288,7 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Buy credits/);
   assert.match(dashboard, /Available on paid plans/);
   assert.match(publicPricing, /Extra-credit purchases are not available on the Free plan/);
+  assert.match(publicPricing, /Browser extension job importer/);
   assert.match(publicPricing, /Credit rollover on longer billing terms/);
   assert.match(publicPricing, /At checkout, you will see the equivalent in your local currency/);
   assert.match(dashboard, /BILLING FREQUENCY/);

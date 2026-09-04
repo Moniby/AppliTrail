@@ -48,7 +48,7 @@ const frequentlyAskedQuestions = [
   },
   {
     question: "Which features require a paid plan?",
-    answer: "Basic and Standard include professional Word and PDF CV formats, reminders and calendar downloads, Excel application-list export, and the ability to purchase extra AI credits.",
+    answer: "The browser extension is available on Free, Basic and Standard. Jobs saved with it count toward your plan’s normal application limit. Basic and Standard also include professional Word and PDF CV formats, reminders and calendar downloads, Excel application-list export, and the ability to purchase extra AI credits.",
   },
   {
     question: "How do quarterly, six-month and annual plans work?",
