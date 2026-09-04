@@ -85,6 +85,37 @@ function cleanState(value: unknown) {
         ...(completedAt && !Number.isNaN(Date.parse(completedAt)) ? { completedAt } : {}),
       };
     }).filter((task) => task.date);
+    safe.contacts = (Array.isArray(app.contacts) ? app.contacts : []).slice(0, 100).map((item, index) => {
+      const contact = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      const lastContactedAt = text(contact.lastContactedAt, 50);
+      return {
+        id: text(contact.id, 120).replace(/[^a-z0-9-]/gi, "-") || `contact-${index + 1}`,
+        name: text(contact.name, 300) || "Hiring contact",
+        role: text(contact.role, 300) || "Hiring contact",
+        ...(text(contact.email, 320) ? { email: text(contact.email, 320) } : {}),
+        ...(text(contact.phone, 120) ? { phone: text(contact.phone, 120) } : {}),
+        ...(safeJobUrl(contact.linkedin) ? { linkedin: safeJobUrl(contact.linkedin) } : {}),
+        ...(text(contact.notes, 5000) ? { notes: text(contact.notes, 5000) } : {}),
+        ...(lastContactedAt && !Number.isNaN(Date.parse(lastContactedAt)) ? { lastContactedAt } : {}),
+      };
+    });
+    safe.interviewRounds = (Array.isArray(app.interviewRounds) ? app.interviewRounds : []).slice(0, 50).map((item, index) => {
+      const round = item && typeof item === "object" ? item as Record<string, unknown> : {};
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(text(round.date, 30)) ? text(round.date, 30) : "";
+      const time = /^\d{2}:\d{2}$/.test(text(round.time, 30)) ? text(round.time, 30) : "";
+      return {
+        id: text(round.id, 120).replace(/[^a-z0-9-]/gi, "-") || `round-${index + 1}`,
+        type: text(round.type, 300) || "Interview",
+        date,
+        ...(time ? { time } : {}),
+        timeZone: text(round.timeZone, 100) || "Local time",
+        ...(text(round.format, 100) ? { format: text(round.format, 100) } : {}),
+        ...(text(round.interviewers, 1000) ? { interviewers: text(round.interviewers, 1000) } : {}),
+        ...(text(round.notes, 10_000) ? { notes: text(round.notes, 10_000) } : {}),
+        ...(text(round.outcome, 2000) ? { outcome: text(round.outcome, 2000) } : {}),
+      };
+    }).filter((round) => round.date);
+    safe.checklistCompleted = Array.from(new Set((Array.isArray(app.checklistCompleted) ? app.checklistCompleted : []).map((item) => text(item, 160).replace(/[^a-z0-9-]/gi, "-")).filter(Boolean))).slice(0, 200);
     const rawReviewDecisions = app.tailoredCvReviewDecisions && typeof app.tailoredCvReviewDecisions === "object"
       ? app.tailoredCvReviewDecisions as Record<string, unknown>
       : {};
@@ -120,7 +151,7 @@ function cleanState(value: unknown) {
     reminderDaysBefore: Math.max(1, Math.min(30, Math.round(Number(rawPreferences.reminderDaysBefore) || 3))),
     followUpDays: Math.max(3, Math.min(60, Math.round(Number(rawPreferences.followUpDays) || 7))),
   };
-  return { schemaVersion: 9, apps, masterCvs, activeMasterCvId, preferences };
+  return { schemaVersion: 10, apps, masterCvs, activeMasterCvId, preferences };
 }
 
 export async function GET(request: Request) {

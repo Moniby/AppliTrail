@@ -6,7 +6,7 @@ export default function PrivacyPage() {
     <article>
       <p className="eyebrow">PRIVACY</p>
       <h1>Your career information is personal.</h1>
-      <p>AppliTrail stores your account identity, Master CV profiles, application records, uploaded resumes, generated documents, reminder settings, AI usage, plan details, billing-event history and sign-in visit metadata so the service can provide its features across your devices.</p>
+      <p>AppliTrail stores your account identity, Master CV profiles, application records, uploaded resumes, generated documents, reminder settings, interview rounds, application checklists, hiring-contact details you choose to enter, AI usage, plan details, billing-event history and sign-in visit metadata so the service can provide its features across your devices.</p>
 
       <h2>How information is used</h2>
       <p>Your information is used to save your dashboard, extract editable information from an uploaded CV when requested, generate career materials, show reminders, enforce account allowances, maintain subscription and credit balances, provide support and protect the service from misuse. It is not made visible to other AppliTrail users.</p>

@@ -141,10 +141,13 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(stateRoute, /rejectionComment: 10_000/);
   assert.match(stateRoute, /interviewNotes: 20_000/);
   assert.match(stateRoute, /safe\.stageHistory = stageHistory\.length/);
-  assert.match(stateRoute, /schemaVersion: 9/);
+  assert.match(stateRoute, /schemaVersion: 10/);
   assert.match(stateRoute, /APPLICATION_SOURCES/);
   assert.match(stateRoute, /safe\.source/);
   assert.match(stateRoute, /safe\.customTasks/);
+  assert.match(stateRoute, /safe\.contacts/);
+  assert.match(stateRoute, /safe\.interviewRounds/);
+  assert.match(stateRoute, /safe\.checklistCompleted/);
   assert.match(stateRoute, /hasPaidPlanFeatures\(account\.plan\)/);
   assert.match(stateRoute, /planResourceLimits\(account\.plan\)/);
   assert.match(stateRoute, /state\.apps\.length > limits\.applications/);
@@ -335,7 +338,9 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /action:"record-login"/);
   assert.match(dashboard, /\^\[\\s\]\*\[=\+\\-@\]/);
   assert.match(dashboard, /const loggedInIdentity=account\?\?identity/);
-  assert.match(dashboard, /view==="overview"\?`Hi, \$\{greetingName\}`/);
+  assert.match(dashboard, /view==="today"\?`Hi, \$\{greetingName\}`/);
+  assert.match(dashboard, /TodayDashboard/);
+  assert.match(dashboard, /ApplicationCRMStudio/);
   assert.doesNotMatch(dashboard, /profile\.name\|\|account\?\.displayName/);
   assert.match(dashboard, /className="reminder-sidebar"/);
   assert.match(preparationDocx, /return Packer\.toBlob\(document\)/);
