@@ -165,11 +165,6 @@ export function TodayDashboard({
       <div><p className="eyebrow">YOUR DAILY COMMAND CENTRE</p><h2>Know what needs attention today</h2><p>Follow-ups, interview rounds and the next practical step for every active application.</p></div>
       <div className="today-hero-count"><strong>{urgent.length}</strong><span>due or waiting</span></div>
     </section>
-    <div className="today-metrics">
-      <article className="card"><span>URGENT ACTIONS</span><strong>{urgent.length}</strong><small>Overdue, due today or ready to follow up</small></article>
-      <article className="card"><span>UPCOMING INTERVIEWS</span><strong>{upcomingRounds.length}</strong><small>Scheduled interview rounds ahead</small></article>
-      <article className="card"><span>ACTIVE APPLICATIONS</span><strong>{activeApplications.length}</strong><small>Still moving through your pipeline</small></article>
-    </div>
     <div className="today-grid">
       <section className="card today-list">
         <div className="today-section-head"><div><p className="eyebrow">DO NEXT</p><h2>Priority actions</h2></div></div>

@@ -232,7 +232,11 @@ test("declares portable account, database and file-storage boundaries", async ()
   assert.match(dashboard, /Application source/);
   assert.match(dashboard, /POSSIBLE DUPLICATE/);
   assert.match(dashboard, /findDuplicateApplication/);
-  assert.match(dashboard, /Success intelligence/);
+  assert.match(dashboard, /<span>Dashboard<\/span>/);
+  assert.match(dashboard, /Overview &amp; actions/);
+  assert.match(dashboard, /Search insights/);
+  assert.doesNotMatch(dashboard, /<span>Prep studio<\/span>/);
+  assert.doesNotMatch(dashboard, /<span>Overview<\/span>/);
   assert.match(dashboard, /Results by application source/);
   assert.match(dashboard, /Results by Master CV/);
   assert.match(dashboard, /No AI credits used/);
