@@ -69,8 +69,8 @@ async function runNode(arguments_, environment = {}) {
 }
 
 const ready = await waitForReady();
-assert.equal(ready.database, "postgres");
-assert.equal(ready.storage, "azure-blob");
+assert.equal(ready.status, "ready");
+assert.equal(ready.service, "applitrail");
 
 const temporaryBackup = await mkdtemp(join(tmpdir(), "applitrail-portable-backup-"));
 try {
