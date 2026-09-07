@@ -1,5 +1,6 @@
 import { beginGeneration, finishGeneration } from "../../../db/appliflow-store";
 import { loadResumeForUser } from "../../../db/resume-storage";
+import { rejectCrossSiteMutation } from "../../api-security";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 const MODEL = "gpt-5.6-sol";
@@ -72,6 +73,8 @@ function safeError(status: number, code = "") {
 }
 
 export async function POST(request: Request) {
+  const untrusted = rejectCrossSiteMutation(request);
+  if (untrusted) return untrusted;
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   const apiKey = process.env.OPENAI_API_KEY;

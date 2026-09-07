@@ -1,7 +1,10 @@
 import { acceptPolicies, deleteAccountData, ensureUser, getUsageSummary, recordLoginEvent } from "../../../db/appliflow-store";
+import { rejectCrossSiteMutation } from "../../api-security";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 export async function POST(request: Request) {
+  const untrusted = rejectCrossSiteMutation(request);
+  if (untrusted) return untrusted;
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   const payload = await request.json().catch(() => ({})) as { action?: string };
@@ -17,6 +20,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const untrusted = rejectCrossSiteMutation(request);
+  if (untrusted) return untrusted;
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   await deleteAccountData(identity.userId);

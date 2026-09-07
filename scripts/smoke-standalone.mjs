@@ -95,8 +95,15 @@ await cp(join(process.cwd(), "dist", "standalone"), bundleDirectory, {
 let server;
 try {
   server = await startServer(dataDirectory, bundleDirectory, administratorEnvironment);
-  const health = await json(await fetch(`${server.origin}/api/health`));
+  const healthResponse = await fetch(`${server.origin}/api/health`);
+  assert.equal(healthResponse.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(healthResponse.headers.get("x-frame-options"), "DENY");
+  assert.match(healthResponse.headers.get("cache-control") || "", /no-store/);
+  const health = await json(healthResponse);
   assert.equal(health.status, "ok");
+
+  const anonymousState = await fetch(`${server.origin}/api/state`);
+  assert.equal(anonymousState.status, 401);
 
   const initial = await json(await fetch(`${server.origin}/api/state`, {
     headers: identityHeaders,
@@ -121,11 +128,32 @@ try {
     activeMasterCvId: "master-portable",
     preferences: { reminderDaysBefore: 3, followUpDays: 7 },
   };
+  const crossSiteSave = await fetch(`${server.origin}/api/state`, {
+    method: "PUT",
+    headers: {
+      ...identityHeaders,
+      "content-type": "application/json",
+      origin: "https://untrusted.example",
+      "sec-fetch-site": "cross-site",
+    },
+    body: JSON.stringify({ state }),
+  });
+  assert.equal(crossSiteSave.status, 403);
+
   await json(await fetch(`${server.origin}/api/state`, {
     method: "PUT",
     headers: { ...identityHeaders, "content-type": "application/json" },
     body: JSON.stringify({ state }),
   }));
+
+  const invalidForm = new FormData();
+  invalidForm.set("file", new File(["not a PDF"], "disguised.pdf", { type: "application/pdf" }));
+  const invalidUpload = await fetch(`${server.origin}/api/resumes`, {
+    method: "POST",
+    headers: identityHeaders,
+    body: invalidForm,
+  });
+  assert.equal(invalidUpload.status, 400);
 
   const form = new FormData();
   form.set("file", new File(["%PDF-1.4\n%AppliTrail smoke test"], "smoke.pdf", {
@@ -186,7 +214,7 @@ try {
   });
   assert.equal(gatewayAuthenticated.ok, true);
 
-  console.log("Standalone runtime, persistence, administrator search, and trusted-gateway authentication checks passed.");
+  console.log("Standalone runtime, persistence, request security, upload validation, administrator search, and trusted-gateway authentication checks passed.");
 } finally {
   if (server) await stopServer(server.child);
   await rm(temporaryRoot, { recursive: true, force: true });

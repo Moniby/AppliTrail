@@ -4,14 +4,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const runtime = await runtimeReadiness();
+    await runtimeReadiness();
     return Response.json(
       {
         status: "ready",
         service: "applitrail",
-        provider: runtime.provider,
-        database: runtime.databaseDialect,
-        storage: runtime.storageProvider,
         checkedAt: new Date().toISOString(),
       },
       { headers: { "Cache-Control": "no-store" } },

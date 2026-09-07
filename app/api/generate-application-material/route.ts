@@ -180,6 +180,8 @@ function safeError(status: number, code = "", label = "application material") {
 }
 
 export async function POST(request: Request) {
+  const untrusted = rejectCrossSiteMutation(request);
+  if (untrusted) return untrusted;
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
 
@@ -347,4 +349,5 @@ export async function POST(request: Request) {
 }
 import { beginGeneration, finishGeneration } from "../../../db/appliflow-store";
 import { loadResumeForUser } from "../../../db/resume-storage";
+import { rejectCrossSiteMutation } from "../../api-security";
 import { authenticationRequired, requestUser } from "../../request-user";

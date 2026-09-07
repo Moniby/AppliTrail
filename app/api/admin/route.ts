@@ -1,4 +1,5 @@
 import { adminSummary, adminUserDetail, setAccountStatus, setAdminRole, setMonthlyAllowance } from "../../../db/appliflow-store";
+import { rejectCrossSiteMutation } from "../../api-security";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 export async function GET(request: Request) {
@@ -13,6 +14,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const untrusted = rejectCrossSiteMutation(request);
+  if (untrusted) return untrusted;
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {

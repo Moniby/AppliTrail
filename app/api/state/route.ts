@@ -1,4 +1,5 @@
 import { ensureUser, getUsageSummary, getUserCreditAudit, getUserState, hasPaidPlanFeatures, planResourceLimits, saveUserState } from "../../../db/appliflow-store";
+import { rejectCrossSiteMutation } from "../../api-security";
 import { authenticationRequired, requestUser } from "../../request-user";
 
 const STAGES = new Set(["Saved", "Applied", "No response after application", "Phone screen", "Interview", "No response after interview", "Assessment", "Offer", "Rejected"]);
@@ -169,6 +170,8 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const untrusted = rejectCrossSiteMutation(request);
+  if (untrusted) return untrusted;
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
