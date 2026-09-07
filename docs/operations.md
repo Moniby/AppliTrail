@@ -50,7 +50,9 @@ file counts plus file checksums before a production migration.
 ## Release controls
 
 - Pull requests and pushes to `main` run application, persistence, security-gateway
-  and portable-stack checks.
+  and portable-stack checks, plus browser journeys covering public access,
+  application tracking, AI confirmation and saved output, reminders, CV file
+  storage, administrator search, and mobile navigation.
 - Container publication is manual or release-tag driven and does not deploy.
 - A later deployment workflow must target protected GitHub environments and require
   an owner approval before staging or production changes.
