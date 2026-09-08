@@ -29,9 +29,19 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isStaging = process.env.APPLITRAIL_ENVIRONMENT === "staging";
+
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={isStaging ? "staging-environment" : undefined}>
+        {isStaging ? (
+          <div className="environment-banner" role="status">
+            <strong>STAGING</strong>
+            <span>Private test environment — no production customer data</span>
+          </div>
+        ) : null}
+        {children}
+      </body>
     </html>
   );
 }
