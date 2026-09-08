@@ -219,6 +219,10 @@ export async function ensureSchema() {
         screen TEXT NOT NULL DEFAULT 'unknown',
         release TEXT NOT NULL DEFAULT 'unknown',
         status TEXT NOT NULL DEFAULT 'open',
+        admin_reply TEXT NOT NULL DEFAULT '',
+        replied_at TEXT,
+        email_status TEXT NOT NULL DEFAULT 'not_configured',
+        last_emailed_at TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         resolved_at TEXT,
@@ -264,6 +268,16 @@ export async function ensureSchema() {
     const usageColumns = await db.prepare("PRAGMA table_info(ai_usage)").all<{ name: string }>();
     if (!usageColumns.results.some((column) => column.name === "credit_source")) {
       await db.prepare("ALTER TABLE ai_usage ADD COLUMN credit_source TEXT NOT NULL DEFAULT 'monthly'").run();
+    }
+    const supportColumns = await db.prepare("PRAGMA table_info(support_issues)").all<{ name: string }>();
+    const missingSupportColumns = [
+      ["admin_reply", "ALTER TABLE support_issues ADD COLUMN admin_reply TEXT NOT NULL DEFAULT ''"],
+      ["replied_at", "ALTER TABLE support_issues ADD COLUMN replied_at TEXT"],
+      ["email_status", "ALTER TABLE support_issues ADD COLUMN email_status TEXT NOT NULL DEFAULT 'not_configured'"],
+      ["last_emailed_at", "ALTER TABLE support_issues ADD COLUMN last_emailed_at TEXT"],
+    ] as const;
+    for (const [name, statement] of missingSupportColumns) {
+      if (!supportColumns.results.some((column) => column.name === name)) await db.prepare(statement).run();
     }
     await db.prepare(`UPDATE users SET plan = 'free', monthly_allowance = 2,
         subscription_status = 'free', updated_at = CURRENT_TIMESTAMP WHERE plan = 'beta'`).run();
@@ -1112,6 +1126,48 @@ const SUPPORT_CATEGORIES = new Set(["job_import", "ai_generation", "billing", "s
 const SUPPORT_PRIORITIES = new Set(["normal", "urgent"]);
 const SUPPORT_STATUSES = new Set(["open", "investigating", "resolved"]);
 
+function supportReference(issueId: string) {
+  return `AT-${issueId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+}
+
+async function sendSupportEmail(issueId: string, kind: "receipt" | "reply" | "status") {
+  const db = getSqlDatabase();
+  const row = await db.prepare(`SELECT s.id, s.summary, s.status, s.admin_reply, u.email, u.display_name
+      FROM support_issues s JOIN users u ON u.id = s.user_id WHERE s.id = ?`).bind(issueId).first<Record<string, unknown>>();
+  if (!row) return "not_found";
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.SUPPORT_FROM_EMAIL?.trim();
+  if (!apiKey || !from) {
+    await db.prepare("UPDATE support_issues SET email_status = 'awaiting_email_setup' WHERE id = ?").bind(issueId).run();
+    return "awaiting_email_setup";
+  }
+  const reference = supportReference(issueId);
+  const name = String(row.display_name || "there");
+  const status = String(row.status);
+  const reply = String(row.admin_reply || "");
+  const subject = kind === "receipt" ? `${reference}: AppliTrail received your report`
+    : kind === "reply" ? `${reference}: AppliTrail support replied`
+      : `${reference}: Your AppliTrail report is ${status}`;
+  const message = kind === "receipt"
+    ? `Hi ${name},\n\nWe received your report: ${String(row.summary)}.\n\nReference: ${reference}\nStatus: Open\n\nYou can follow its status in your AppliTrail Account page.`
+    : kind === "reply"
+      ? `Hi ${name},\n\nAppliTrail support replied to ${reference}:\n\n${reply}\n\nStatus: ${status}. You can view this reply in your AppliTrail Account page.`
+      : `Hi ${name},\n\nThe status of ${reference} has changed to ${status}.\n\nYou can view the latest details in your AppliTrail Account page.`;
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from, to: [String(row.email)], subject, text: `${message}\n\nAppliTrail — a product of Tompris Technologies Inc.` }),
+    });
+    if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
+    await db.prepare("UPDATE support_issues SET email_status = 'sent', last_emailed_at = CURRENT_TIMESTAMP WHERE id = ?").bind(issueId).run();
+    return "sent";
+  } catch {
+    await db.prepare("UPDATE support_issues SET email_status = 'failed' WHERE id = ?").bind(issueId).run();
+    return "failed";
+  }
+}
+
 export async function createSupportIssue(identity: Identity, input: {
   category?: string;
   priority?: string;
@@ -1132,17 +1188,21 @@ export async function createSupportIssue(identity: Identity, input: {
       (id, user_id, category, priority, summary, details, screen, release, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')`)
     .bind(id, identity.userId, category, priority, summary, details, screen, release).run();
-  return { id, category, priority, summary, details, screen, release, status: "open", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  const emailStatus = await sendSupportEmail(id, "receipt");
+  return { id, reference: supportReference(id), category, priority, summary, details, screen, release, status: "open", emailStatus, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
 }
 
 export async function getUserSupportIssues(identity: Identity) {
   await ensureUser(identity);
   const rows = await getSqlDatabase().prepare(`SELECT id, category, priority, summary, details, screen, release,
-      status, created_at, updated_at FROM support_issues WHERE user_id = ? ORDER BY created_at DESC LIMIT 25`)
+      status, admin_reply, replied_at, email_status, last_emailed_at, created_at, updated_at
+      FROM support_issues WHERE user_id = ? ORDER BY created_at DESC LIMIT 25`)
     .bind(identity.userId).all<Record<string, unknown>>();
   return rows.results.map((row) => ({
     id: String(row.id), category: String(row.category), priority: String(row.priority), summary: String(row.summary),
-    details: String(row.details), screen: String(row.screen), release: String(row.release), status: String(row.status),
+    reference: supportReference(String(row.id)), details: String(row.details), screen: String(row.screen), release: String(row.release), status: String(row.status),
+    adminReply: String(row.admin_reply || ""), repliedAt: row.replied_at ? databaseTimestamp(row.replied_at) : null,
+    emailStatus: String(row.email_status || "not_configured"), lastEmailedAt: row.last_emailed_at ? databaseTimestamp(row.last_emailed_at) : null,
     createdAt: databaseTimestamp(row.created_at), updatedAt: databaseTimestamp(row.updated_at),
   }));
 }
@@ -1155,6 +1215,19 @@ export async function setSupportIssueStatus(identity: Identity, issueId: string,
       resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id = ?`)
     .bind(status, status, issueId.slice(0, 100)).run();
   if (resultChanges(result) !== 1) throw new Error("Issue report not found.");
+  await sendSupportEmail(issueId, "status");
+}
+
+export async function replyToSupportIssue(identity: Identity, issueId: string, message: string) {
+  const account = await ensureUser(identity);
+  if (!account.isAdmin) throw new Error("Administrator access is required.");
+  const reply = message.replace(/\r\n?/g, "\n").trim().slice(0, 4_000);
+  if (reply.length < 2) throw new Error("Write a reply before sending.");
+  const result = await getSqlDatabase().prepare(`UPDATE support_issues SET admin_reply = ?, replied_at = CURRENT_TIMESTAMP,
+      status = CASE WHEN status = 'open' THEN 'investigating' ELSE status END, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .bind(reply, issueId.slice(0, 100)).run();
+  if (resultChanges(result) !== 1) throw new Error("Issue report not found.");
+  await sendSupportEmail(issueId, "reply");
 }
 
 export async function adminSummary(identity: Identity, query = "") {
@@ -1210,7 +1283,8 @@ export async function adminSummary(identity: Identity, query = "") {
       FROM billing_transactions b JOIN users u ON u.id = b.user_id
       ORDER BY b.created_at DESC LIMIT 200`).all<Record<string, unknown>>();
   const issueRows = await db.prepare(`SELECT s.id, s.category, s.priority, s.summary, s.details, s.screen,
-      s.release, s.status, s.created_at, s.updated_at, u.email, u.display_name
+      s.release, s.status, s.admin_reply, s.replied_at, s.email_status, s.last_emailed_at,
+      s.created_at, s.updated_at, u.email, u.display_name
       FROM support_issues s JOIN users u ON u.id = s.user_id
       ORDER BY CASE s.status WHEN 'open' THEN 0 WHEN 'investigating' THEN 1 ELSE 2 END,
         CASE s.priority WHEN 'urgent' THEN 0 ELSE 1 END, s.created_at DESC LIMIT 200`).all<Record<string, unknown>>();
@@ -1255,8 +1329,10 @@ export async function adminSummary(identity: Identity, query = "") {
       ...billingTransaction(row), email: String(row.email), displayName: String(row.display_name),
     })),
     supportIssues: issueRows.results.map((row) => ({
-      id: String(row.id), category: String(row.category), priority: String(row.priority), summary: String(row.summary),
+      id: String(row.id), reference: supportReference(String(row.id)), category: String(row.category), priority: String(row.priority), summary: String(row.summary),
       details: String(row.details), screen: String(row.screen), release: String(row.release), status: String(row.status),
+      adminReply: String(row.admin_reply || ""), repliedAt: row.replied_at ? databaseTimestamp(row.replied_at) : null,
+      emailStatus: String(row.email_status || "not_configured"), lastEmailedAt: row.last_emailed_at ? databaseTimestamp(row.last_emailed_at) : null,
       createdAt: databaseTimestamp(row.created_at), updatedAt: databaseTimestamp(row.updated_at),
       email: String(row.email), displayName: String(row.display_name),
     })),

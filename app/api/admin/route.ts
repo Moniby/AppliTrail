@@ -1,4 +1,4 @@
-import { adminSummary, adminUserDetail, setAccountStatus, setAdminRole, setMonthlyAllowance, setSupportIssueStatus } from "../../../db/appliflow-store";
+import { adminSummary, adminUserDetail, replyToSupportIssue, setAccountStatus, setAdminRole, setMonthlyAllowance, setSupportIssueStatus } from "../../../db/appliflow-store";
 import { rejectCrossSiteMutation } from "../../api-security";
 import { authenticationRequired, requestUser } from "../../request-user";
 
@@ -19,8 +19,11 @@ export async function POST(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
-    const payload = await request.json() as { action?: "allowance" | "status" | "role" | "issue-status"; userId?: string; issueId?: string; monthlyAllowance?: number; status?: string; isAdmin?: boolean; query?: string };
-    if (payload.action === "issue-status") {
+    const payload = await request.json() as { action?: "allowance" | "status" | "role" | "issue-status" | "issue-reply"; userId?: string; issueId?: string; reply?: string; monthlyAllowance?: number; status?: string; isAdmin?: boolean; query?: string };
+    if (payload.action === "issue-reply") {
+      if (!payload.issueId) return Response.json({ error: "Choose an issue report." }, { status: 400 });
+      await replyToSupportIssue(identity, payload.issueId, payload.reply ?? "");
+    } else if (payload.action === "issue-status") {
       if (!payload.issueId) return Response.json({ error: "Choose an issue report." }, { status: 400 });
       await setSupportIssueStatus(identity, payload.issueId, payload.status ?? "");
     } else if (!payload.userId) {

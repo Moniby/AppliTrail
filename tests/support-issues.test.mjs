@@ -5,13 +5,15 @@ import test from "node:test";
 const source = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
 test("persists privacy-safe user issue reports and exposes them to administrators", async () => {
-  const [dashboard, route, adminRoute, store, schema, migration, backup] = await Promise.all([
+  const [dashboard, styles, route, adminRoute, store, schema, migration, replyMigration, backup] = await Promise.all([
     source("../app/dashboard-client.tsx"),
+    source("../app/globals.css"),
     source("../app/api/support-issues/route.ts"),
     source("../app/api/admin/route.ts"),
     source("../db/appliflow-store.ts"),
     source("../db/schema.ts"),
     source("../drizzle/0009_robust_sasquatch.sql"),
+    source("../drizzle/0010_damp_scarlet_witch.sql"),
     source("../scripts/portable-backup.mjs"),
   ]);
 
@@ -20,18 +22,27 @@ test("persists privacy-safe user issue reports and exposes them to administrator
   assert.match(dashboard, /SYSTEM HEALTH/);
   assert.match(dashboard, /USER ISSUE REPORTS/);
   assert.match(dashboard, /Support inbox/);
+  assert.match(dashboard, /Your problem reports/);
+  assert.match(dashboard, /Send reply/);
+  assert.match(dashboard, /Admin dashboard sections/);
+  assert.match(styles, /admin-section-nav/);
   assert.match(route, /requestUser\(request\)/);
   assert.match(route, /rejectCrossSiteMutation\(request\)/);
   assert.match(route, /createSupportIssue/);
   assert.match(route, /getUserSupportIssues/);
   assert.match(adminRoute, /payload\.action === "issue-status"/);
+  assert.match(adminRoute, /payload\.action === "issue-reply"/);
   assert.match(store, /export async function createSupportIssue/);
   assert.match(store, /export async function setSupportIssueStatus/);
+  assert.match(store, /export async function replyToSupportIssue/);
+  assert.match(store, /RESEND_API_KEY/);
   assert.match(store, /databaseReady/);
   assert.match(store, /storageReady/);
   assert.match(store, /webhookIssues24h/);
   assert.match(schema, /"support_issues"/);
   assert.match(migration, /CREATE TABLE `support_issues`/);
   assert.match(migration, /idx_support_issues_status_created/);
+  assert.match(replyMigration, /admin_reply/);
+  assert.match(replyMigration, /email_status/);
   assert.match(backup, /"support_issues"/);
 });
