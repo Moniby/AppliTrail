@@ -11,6 +11,7 @@ const TABLES = [
   "login_events",
   "billing_transactions",
   "stripe_webhook_events",
+  "support_issues",
   "app_settings",
 ];
 const SERIAL_TABLES = ["ai_usage", "login_events", "billing_transactions"];

@@ -209,6 +209,21 @@ export async function ensureSchema() {
         received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         processed_at TEXT
       )`),
+      db.prepare(`CREATE TABLE IF NOT EXISTS support_issues (
+        id TEXT PRIMARY KEY NOT NULL,
+        user_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        priority TEXT NOT NULL DEFAULT 'normal',
+        summary TEXT NOT NULL,
+        details TEXT NOT NULL DEFAULT '',
+        screen TEXT NOT NULL DEFAULT 'unknown',
+        release TEXT NOT NULL DEFAULT 'unknown',
+        status TEXT NOT NULL DEFAULT 'open',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        resolved_at TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`),
       db.prepare(`CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL,
@@ -220,6 +235,8 @@ export async function ensureSchema() {
       db.prepare("CREATE INDEX IF NOT EXISTS idx_billing_transactions_user_created ON billing_transactions(user_id, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_billing_transactions_status_created ON billing_transactions(status, created_at)"),
       db.prepare("CREATE INDEX IF NOT EXISTS idx_stripe_webhook_status_received ON stripe_webhook_events(status, received_at)"),
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_support_issues_user_created ON support_issues(user_id, created_at)"),
+      db.prepare("CREATE INDEX IF NOT EXISTS idx_support_issues_status_created ON support_issues(status, created_at)"),
     ]);
     const userColumns = await db.prepare("PRAGMA table_info(users)").all<{ name: string }>();
     const missingUserColumns = [
@@ -1091,6 +1108,55 @@ export async function resumeSubscription(identity: Identity, requestId: string) 
   return getBillingSummary(identity);
 }
 
+const SUPPORT_CATEGORIES = new Set(["job_import", "ai_generation", "billing", "sign_in", "saved_data", "other"]);
+const SUPPORT_PRIORITIES = new Set(["normal", "urgent"]);
+const SUPPORT_STATUSES = new Set(["open", "investigating", "resolved"]);
+
+export async function createSupportIssue(identity: Identity, input: {
+  category?: string;
+  priority?: string;
+  summary?: string;
+  details?: string;
+  screen?: string;
+}) {
+  await ensureUser(identity);
+  const category = SUPPORT_CATEGORIES.has(input.category ?? "") ? input.category! : "other";
+  const priority = SUPPORT_PRIORITIES.has(input.priority ?? "") ? input.priority! : "normal";
+  const summary = (input.summary ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const details = (input.details ?? "").replace(/\r\n?/g, "\n").trim().slice(0, 4_000);
+  const screen = (input.screen ?? "unknown").replace(/[^a-z0-9_-]/gi, "").slice(0, 50) || "unknown";
+  if (summary.length < 8) throw new Error("Add a short summary of at least 8 characters.");
+  const id = crypto.randomUUID();
+  const release = (process.env.APPLITRAIL_RELEASE || "development").slice(0, 100);
+  await getSqlDatabase().prepare(`INSERT INTO support_issues
+      (id, user_id, category, priority, summary, details, screen, release, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')`)
+    .bind(id, identity.userId, category, priority, summary, details, screen, release).run();
+  return { id, category, priority, summary, details, screen, release, status: "open", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+}
+
+export async function getUserSupportIssues(identity: Identity) {
+  await ensureUser(identity);
+  const rows = await getSqlDatabase().prepare(`SELECT id, category, priority, summary, details, screen, release,
+      status, created_at, updated_at FROM support_issues WHERE user_id = ? ORDER BY created_at DESC LIMIT 25`)
+    .bind(identity.userId).all<Record<string, unknown>>();
+  return rows.results.map((row) => ({
+    id: String(row.id), category: String(row.category), priority: String(row.priority), summary: String(row.summary),
+    details: String(row.details), screen: String(row.screen), release: String(row.release), status: String(row.status),
+    createdAt: databaseTimestamp(row.created_at), updatedAt: databaseTimestamp(row.updated_at),
+  }));
+}
+
+export async function setSupportIssueStatus(identity: Identity, issueId: string, status: string) {
+  const account = await ensureUser(identity);
+  if (!account.isAdmin) throw new Error("Administrator access is required.");
+  if (!SUPPORT_STATUSES.has(status)) throw new Error("Choose a valid issue status.");
+  const result = await getSqlDatabase().prepare(`UPDATE support_issues SET status = ?, updated_at = CURRENT_TIMESTAMP,
+      resolved_at = CASE WHEN ? = 'resolved' THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id = ?`)
+    .bind(status, status, issueId.slice(0, 100)).run();
+  if (resultChanges(result) !== 1) throw new Error("Issue report not found.");
+}
+
 export async function adminSummary(identity: Identity, query = "") {
   const account = await ensureUser(identity);
   if (!account.isAdmin) throw new Error("Administrator access is required.");
@@ -1110,6 +1176,16 @@ export async function adminSummary(identity: Identity, query = "") {
       (SELECT COALESCE(SUM(amount_cents), 0) FROM billing_transactions
         WHERE status = 'succeeded' AND amount_cents > 0) AS sandbox_revenue_cents`)
     .first<{ users: number; suspended: number; paid_subscribers: number; generations: number; tokens: number; sandbox_revenue_cents: number }>();
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const health = await db.prepare(`SELECT
+      (SELECT COUNT(*) FROM ai_usage WHERE status = 'succeeded' AND datetime(created_at) >= datetime(?)) AS ai_succeeded,
+      (SELECT COUNT(*) FROM ai_usage WHERE status = 'failed' AND datetime(created_at) >= datetime(?)) AS ai_failed,
+      (SELECT COUNT(*) FROM stripe_webhook_events WHERE status NOT IN ('processed', 'succeeded') AND datetime(received_at) >= datetime(?)) AS webhook_issues,
+      (SELECT COUNT(*) FROM support_issues WHERE status != 'resolved') AS open_issues,
+      (SELECT COUNT(*) FROM support_issues WHERE priority = 'urgent' AND status != 'resolved') AS urgent_issues`)
+    .bind(dayAgo, dayAgo, dayAgo).first<Record<string, unknown>>();
+  let storageReady = true;
+  try { await getResumeStorage().list({ prefix: "__health__", limit: 1 }); } catch { storageReady = false; }
   const usersStatement = db.prepare(`SELECT u.id, u.email, u.display_name, u.plan, u.monthly_allowance,
       u.bonus_credits, u.is_admin, u.account_status, u.subscription_status, u.billing_interval, u.billing_period_end,
       u.cancel_at_period_end, u.created_at, u.updated_at, COUNT(a.id) AS generations,
@@ -1133,10 +1209,27 @@ export async function adminSummary(identity: Identity, query = "") {
       b.plan, b.credits, b.amount_cents, b.currency, b.status, b.created_at, u.email, u.display_name
       FROM billing_transactions b JOIN users u ON u.id = b.user_id
       ORDER BY b.created_at DESC LIMIT 200`).all<Record<string, unknown>>();
+  const issueRows = await db.prepare(`SELECT s.id, s.category, s.priority, s.summary, s.details, s.screen,
+      s.release, s.status, s.created_at, s.updated_at, u.email, u.display_name
+      FROM support_issues s JOIN users u ON u.id = s.user_id
+      ORDER BY CASE s.status WHEN 'open' THEN 0 WHEN 'investigating' THEN 1 ELSE 2 END,
+        CASE s.priority WHEN 'urgent' THEN 0 ELSE 1 END, s.created_at DESC LIMIT 200`).all<Record<string, unknown>>();
   return {
     totals: { users: Number(totals?.users ?? 0), suspended: Number(totals?.suspended ?? 0),
       paidSubscribers: Number(totals?.paid_subscribers ?? 0), generations: Number(totals?.generations ?? 0),
       tokens: Number(totals?.tokens ?? 0), sandboxRevenueCents: Number(totals?.sandbox_revenue_cents ?? 0) },
+    systemHealth: {
+      databaseReady: true,
+      storageReady,
+      aiSucceeded24h: Number(health?.ai_succeeded ?? 0),
+      aiFailed24h: Number(health?.ai_failed ?? 0),
+      webhookIssues24h: Number(health?.webhook_issues ?? 0),
+      openIssues: Number(health?.open_issues ?? 0),
+      urgentIssues: Number(health?.urgent_issues ?? 0),
+      environment: process.env.APPLITRAIL_ENVIRONMENT || "production",
+      release: process.env.APPLITRAIL_RELEASE || "development",
+      checkedAt: new Date().toISOString(),
+    },
     query: searchQuery,
     userMatches: Number(matches?.count ?? 0),
     userResultLimit: 100,
@@ -1160,6 +1253,12 @@ export async function adminSummary(identity: Identity, query = "") {
     })),
     paymentAudit: paymentRows.results.map((row) => ({
       ...billingTransaction(row), email: String(row.email), displayName: String(row.display_name),
+    })),
+    supportIssues: issueRows.results.map((row) => ({
+      id: String(row.id), category: String(row.category), priority: String(row.priority), summary: String(row.summary),
+      details: String(row.details), screen: String(row.screen), release: String(row.release), status: String(row.status),
+      createdAt: databaseTimestamp(row.created_at), updatedAt: databaseTimestamp(row.updated_at),
+      email: String(row.email), displayName: String(row.display_name),
     })),
   };
 }

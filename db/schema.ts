@@ -99,6 +99,28 @@ export const stripeWebhookEvents = sqliteTable(
   (table) => [index("idx_stripe_webhook_status_received").on(table.status, table.receivedAt)],
 );
 
+export const supportIssues = sqliteTable(
+  "support_issues",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    priority: text("priority").notNull().default("normal"),
+    summary: text("summary").notNull(),
+    details: text("details").notNull().default(""),
+    screen: text("screen").notNull().default("unknown"),
+    release: text("release").notNull().default("unknown"),
+    status: text("status").notNull().default("open"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+    resolvedAt: text("resolved_at"),
+  },
+  (table) => [
+    index("idx_support_issues_user_created").on(table.userId, table.createdAt),
+    index("idx_support_issues_status_created").on(table.status, table.createdAt),
+  ],
+);
+
 export const appSettings = sqliteTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),

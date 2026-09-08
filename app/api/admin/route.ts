@@ -1,4 +1,4 @@
-import { adminSummary, adminUserDetail, setAccountStatus, setAdminRole, setMonthlyAllowance } from "../../../db/appliflow-store";
+import { adminSummary, adminUserDetail, setAccountStatus, setAdminRole, setMonthlyAllowance, setSupportIssueStatus } from "../../../db/appliflow-store";
 import { rejectCrossSiteMutation } from "../../api-security";
 import { authenticationRequired, requestUser } from "../../request-user";
 
@@ -19,9 +19,13 @@ export async function POST(request: Request) {
   const identity = requestUser(request);
   if (!identity) return authenticationRequired();
   try {
-    const payload = await request.json() as { action?: "allowance" | "status" | "role"; userId?: string; monthlyAllowance?: number; status?: "active" | "suspended"; isAdmin?: boolean; query?: string };
-    if (!payload.userId) return Response.json({ error: "Choose a user." }, { status: 400 });
-    if (payload.action === "status") {
+    const payload = await request.json() as { action?: "allowance" | "status" | "role" | "issue-status"; userId?: string; issueId?: string; monthlyAllowance?: number; status?: string; isAdmin?: boolean; query?: string };
+    if (payload.action === "issue-status") {
+      if (!payload.issueId) return Response.json({ error: "Choose an issue report." }, { status: 400 });
+      await setSupportIssueStatus(identity, payload.issueId, payload.status ?? "");
+    } else if (!payload.userId) {
+      return Response.json({ error: "Choose a user." }, { status: 400 });
+    } else if (payload.action === "status") {
       if (payload.status !== "active" && payload.status !== "suspended") return Response.json({ error: "Choose a valid account status." }, { status: 400 });
       await setAccountStatus(identity, payload.userId, payload.status);
     } else if (payload.action === "allowance") {
