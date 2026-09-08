@@ -106,6 +106,6 @@ export default function PublicPricing({ ctaHref, signedIn }: { ctaHref: string; 
     </div>
     <p className="landing-billing-note">Longer plans are paid upfront. Unused included credits roll over during the prepaid term and expire at term end if the subscription is not renewed.</p>
     <p className="landing-local-pricing"><strong>Paying outside Canada?</strong> No worries. At checkout, you will see the equivalent in your local currency where supported.</p>
-    <p className="landing-credit-note">Basic and Standard members can buy additional AI credits for $1.50 CAD each. Extra-credit purchases are not available on the Free plan. Prices exclude applicable taxes. Stripe checkout is currently in test mode, so no real payment is collected.</p>
+    <p className="landing-credit-note">Basic and Standard members can buy additional AI credits for $1.50 CAD each. Extra-credit purchases are not available on the Free plan. Prices exclude applicable taxes. Subscriptions and purchases for AppliTrail are offered by Tompris Technologies Inc. and processed securely by Stripe. Stripe checkout is currently in test mode, so no real payment is collected.</p>
   </section>;
 }

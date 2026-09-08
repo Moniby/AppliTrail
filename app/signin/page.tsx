@@ -32,6 +32,7 @@ export default async function SignInPage() {
         <p>On this hosted version, Google sign-in is completed through the secure ChatGPT account gateway. Select <b>Continue with Google</b> on the next screen. AppliTrail never receives your Google password.</p>
       </div>
       <p className="signin-legal">By continuing, you can review and accept the <a href="/terms">Terms of Use</a> and <a href="/privacy">Privacy Notice</a> before saving career information.</p>
+      <p className="signin-owner">AppliTrail is a product of Tompris Technologies Inc.</p>
     </section>
     <section className="signin-benefits">
       <p className="eyebrow">YOUR ACCOUNT TRAVELS WITH YOU</p>

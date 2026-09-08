@@ -108,6 +108,29 @@ test("uses the approved AppliTrail logo across public and account surfaces", asy
   assert.doesNotMatch(dashboard, /className="mark">A/);
 });
 
+test("identifies Tompris Technologies Inc. as the AppliTrail product owner", async () => {
+  const [landing, extension, signIn, privacy, terms, dashboard, publicPricing, tailoredCv, coverLetter, preparation] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/extension/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/signin/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/terms/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/public-pricing.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/tailored-cv-documents.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/cover-letter-docx.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/preparation-docx.ts", import.meta.url), "utf8"),
+  ]);
+  for (const surface of [landing, extension, signIn, privacy, terms, dashboard, publicPricing]) {
+    assert.match(surface, /Tompris Technologies Inc\./);
+  }
+  for (const documentSource of [tailoredCv, coverLetter, preparation]) {
+    assert.match(documentSource, /creator: "Tompris Technologies Inc\. — AppliTrail"/);
+  }
+  assert.match(landing, /All rights reserved/);
+  assert.match(terms, /Subscriptions and purchases for AppliTrail are offered by Tompris Technologies Inc\./);
+});
+
 test("declares portable account, database and file-storage boundaries", async () => {
   const [hostingText, schema, stateRoute, resumeRoute, extractResumeRoute, generateRoute, accountRoute, adminRoute, billingRoute, stripeWebhookRoute, stripeBilling, dashboard, publicPricing, preparationDocx, coverLetterDocx, accountStore, phaseThreeMigration, allowanceMigration, loginAuditMigration, billingMigration, billingIntervalMigration, stripeWebhookMigration, appSettingsMigration, rolloverMigration] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
