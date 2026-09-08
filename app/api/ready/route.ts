@@ -9,6 +9,7 @@ export async function GET() {
       {
         status: "ready",
         service: "applitrail",
+        environment: process.env.APPLITRAIL_ENVIRONMENT || "production",
         checkedAt: new Date().toISOString(),
       },
       { headers: { "Cache-Control": "no-store" } },
@@ -18,6 +19,7 @@ export async function GET() {
       {
         status: "not_ready",
         service: "applitrail",
+        environment: process.env.APPLITRAIL_ENVIRONMENT || "production",
         checkedAt: new Date().toISOString(),
       },
       { status: 503, headers: { "Cache-Control": "no-store" } },

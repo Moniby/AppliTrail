@@ -14,6 +14,7 @@
     "test:e2e": "npm run build && playwright test",
     "start:e2e": "node scripts/start-e2e.mjs",
     "test:portable": "node scripts/smoke-portable-stack.mjs",
+    "check:hosted": "node scripts/check-hosted-health.mjs",
     "backup:portable": "node scripts/portable-backup.mjs backup",
     "restore:portable": "node scripts/portable-backup.mjs restore",
     "typecheck": "tsc --noEmit",

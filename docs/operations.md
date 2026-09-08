@@ -54,6 +54,12 @@ file counts plus file checksums before a production migration.
   application tracking, AI confirmation and saved output, reminders, CV file
   storage, administrator search, and mobile navigation.
 - Container publication is manual or release-tag driven and does not deploy.
-- A later deployment workflow must target protected GitHub environments and require
-  an owner approval before staging or production changes.
+- Successful CI builds prepare a staging-labelled candidate from the exact validated
+  revision. The private staging Site remains an owner-controlled publish.
+- Production validation requires the full staging-approved revision plus an explicit
+  `PUBLISH` confirmation and targets the protected `production` environment.
+- Production health and readiness are checked twice an hour.
 - Production data is never included in a container image.
+
+See [release management](release-management.md) for environment separation,
+approval, monitoring and rollback instructions.

@@ -454,3 +454,32 @@ test("ships a container-safe runtime and GitHub Actions release path", async () 
   assert.match(health, /status: "ok"/);
   assert.match(readiness, /runtimeReadiness/);
 });
+
+test("labels staging and ships approval, monitoring, and rollback controls", async () => {
+  const [layout, styles, health, readiness, staging, production, monitor, monitorScript, releaseGuide] = await Promise.all([
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/ready/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/staging-candidate.yml", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/production-approval.yml", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/production-monitor.yml", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/check-hosted-health.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../docs/release-management.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(layout, /APPLITRAIL_ENVIRONMENT === "staging"/);
+  assert.match(layout, /Private test environment/);
+  assert.match(styles, /\.environment-banner/);
+  assert.match(health, /environment: process\.env\.APPLITRAIL_ENVIRONMENT/);
+  assert.match(readiness, /environment: process\.env\.APPLITRAIL_ENVIRONMENT/);
+  assert.match(staging, /environment: staging/);
+  assert.match(staging, /Production has not been changed/);
+  assert.match(production, /inputs\.confirmation == 'PUBLISH'/);
+  assert.match(production, /environment: production/);
+  assert.match(monitor, /npm run check:hosted/);
+  assert.match(monitorScript, /\/api\/health/);
+  assert.match(monitorScript, /\/api\/ready/);
+  assert.match(releaseGuide, /last known-good Sites version/);
+  assert.match(releaseGuide, /must not delete, recreate or restore customer data/);
+});

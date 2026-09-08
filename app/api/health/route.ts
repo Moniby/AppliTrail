@@ -5,6 +5,7 @@ export function GET() {
     {
       status: "ok",
       service: "applitrail",
+      environment: process.env.APPLITRAIL_ENVIRONMENT || "production",
       release: process.env.APPLITRAIL_RELEASE || "development",
       checkedAt: new Date().toISOString(),
     },

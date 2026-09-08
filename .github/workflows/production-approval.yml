@@ -1,0 +1,60 @@
+name: Validate production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full Git revision already approved in staging
+        required: true
+        type: string
+      confirmation:
+        description: Type PUBLISH to approve production validation
+        required: true
+        type: string
+
+concurrency:
+  group: production-approval
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate owner-approved production revision
+    if: inputs.confirmation == 'PUBLISH'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Check out the approved revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_sha }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.14.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Run complete release checks
+        run: npm run ci
+
+      - name: Install Chromium test browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run customer journeys
+        run: npm run test:e2e
+
+      - name: Record approval summary
+        run: |
+          echo "## Production revision validated" >> "$GITHUB_STEP_SUMMARY"
+          echo "Revision: \`${{ inputs.release_sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "A separate owner-controlled Sites publish is still required." >> "$GITHUB_STEP_SUMMARY"
