@@ -63,7 +63,7 @@ export async function createCoverLetterDocxBlob({
     .join("  |  ");
 
   const document = new Document({
-    creator: "AppliTrail",
+    creator: "Tompris Technologies Inc. — AppliTrail",
     title: `Cover Letter - ${role} at ${company}`,
     description: `AppliTrail cover letter for ${role} at ${company}`,
     styles: {

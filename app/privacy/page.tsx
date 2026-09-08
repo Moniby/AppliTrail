@@ -6,6 +6,7 @@ export default function PrivacyPage() {
     <article>
       <p className="eyebrow">PRIVACY</p>
       <h1>Your career information is personal.</h1>
+      <p>Tompris Technologies Inc. operates AppliTrail. This notice explains how information is handled when you use the AppliTrail website, account workspace and browser extension.</p>
       <p>AppliTrail stores your account identity, Master CV profiles, application records, uploaded resumes, generated documents, reminder settings, interview rounds, application checklists, hiring-contact details you choose to enter, AI usage, plan details, billing-event history and sign-in visit metadata so the service can provide its features across your devices.</p>
 
       <h2>How information is used</h2>
@@ -31,7 +32,7 @@ export default function PrivacyPage() {
 
       <h2>Your responsibility</h2>
       <p>Review extracted and generated materials before use. Do not upload information you are not authorized to process. This notice may be updated as AppliTrail’s services and legal requirements develop.</p>
-      <p className="legal-updated">Effective August 25, 2026</p>
+      <p className="legal-updated">Effective September 8, 2026 · AppliTrail is a product of Tompris Technologies Inc.</p>
     </article>
   </main>;
 }

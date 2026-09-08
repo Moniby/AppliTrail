@@ -64,7 +64,7 @@ export async function createPreparationDocxBlob({
   const documentLabel = kind === "phone" ? "Phone Screen Brief" : "Interview Preparation";
   const formattedDate = generatedAt.toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
   const document = new Document({
-    creator: "AppliTrail",
+    creator: "Tompris Technologies Inc. — AppliTrail",
     title: `${documentLabel} - ${role} at ${company}`,
     description: `AppliTrail ${documentLabel.toLowerCase()} for ${role} at ${company}`,
     styles: {
