@@ -2,6 +2,28 @@ const captureButton = document.querySelector("#capture");
 const status = document.querySelector("#status");
 const { extractJobPosting } = globalThis.AppliTrailJobExtractor;
 
+function mergeFrameResults(results, pageUrl) {
+  const candidates = results
+    .map((entry) => entry?.result)
+    .filter(Boolean)
+    .sort((left, right) => {
+      const score = (item) => (item.description?.length || 0)
+        + (item.role ? 1200 : 0)
+        + (item.company ? 900 : 0)
+        + [item.location, item.positionType, item.locationType, item.salary].filter(Boolean).length * 250;
+      return score(right) - score(left);
+    });
+  if (!candidates.length) return null;
+  const merged = { ...candidates[0] };
+  for (const candidate of candidates.slice(1)) {
+    for (const field of ["company", "role", "location", "positionType", "locationType", "salary", "description"]) {
+      if (!merged[field] && candidate[field]) merged[field] = candidate[field];
+    }
+  }
+  merged.url = pageUrl;
+  return merged;
+}
+
 function setStatus(message, disabled = false) {
   status.textContent = message;
   captureButton.disabled = disabled;
@@ -14,7 +36,13 @@ captureButton.addEventListener("click", async () => {
     if (!tab?.id || !tab.url || !/^https?:/i.test(tab.url)) {
       throw new Error("Open a job posting in a regular browser tab first.");
     }
-    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: extractJobPosting });
+    let frameResults;
+    try {
+      frameResults = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: extractJobPosting });
+    } catch {
+      frameResults = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: extractJobPosting });
+    }
+    const result = mergeFrameResults(frameResults, tab.url);
     if (!result?.description && !result?.role && !result?.company) {
       throw new Error("AppliTrail could not find a job posting on this page. You can still add it manually.");
     }

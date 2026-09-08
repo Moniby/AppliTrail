@@ -206,6 +206,49 @@ test("finds Indeed's Full job description by its visible heading when selectors 
   assert.match(result.description, /coordinates technology initiatives/);
 });
 
+test("extracts a labelled vacancy from a generic session-based career portal", async () => {
+  const description = [
+    "Job Description",
+    "The Technical Support Analyst provides responsive support for hospital systems and end users.",
+    "",
+    "Key Responsibilities",
+    "Resolve incidents, maintain documentation, and support clinical technology.",
+    "",
+    "Qualifications",
+    "Three years of technical support experience and strong customer service skills.",
+  ].join("\n");
+  const body = [
+    "Recruitment",
+    "Job Title:",
+    "Technical Support Analyst",
+    "Location:",
+    "Ottawa, ON",
+    "Position Type:",
+    "Full-time",
+    "Salary Range:",
+    "$70,000 - $82,000",
+    description,
+    "Apply now",
+  ].join("\n");
+  const document = page({
+    "h1": element("Recruitment"),
+  }, {
+    'script[type="application/ld+json"]': [],
+    '[class*="job-detail"]': [element(description)],
+  });
+  document.body = element(body);
+
+  const result = await extractorFor(document, "https://erecruiter.qch.on.ca/Session-WindowReplace-3?Token=expired");
+  assert.equal(result.company, "Queensway Carleton Hospital");
+  assert.equal(result.role, "Technical Support Analyst");
+  assert.equal(result.location, "Ottawa, ON");
+  assert.equal(result.positionType, "Full-time");
+  assert.equal(result.salary, "$70,000 - $82,000");
+  assert.match(result.description, /^Job Description/);
+  assert.match(result.description, /support clinical technology/);
+  assert.notEqual(result.role, "Recruitment");
+});
+
 test("keeps structured JobPosting extraction as the generic fallback", async () => {
   const jsonLd = element(JSON.stringify({
     "@context": "https://schema.org",
@@ -245,11 +288,14 @@ test("extracts LinkedIn details from a title-anchored visible header without sta
   assert.equal(result.positionType, "Full-time");
 });
 
-test("loads the dedicated extractor in extension version 1.1.5", async () => {
+test("loads the dedicated extractor in extension version 1.2.0", async () => {
   const [popup, manifestText] = await Promise.all([
     readFile(new URL("../extensions/applitrail-job-importer/popup.html", import.meta.url), "utf8"),
     readFile(new URL("../extensions/applitrail-job-importer/manifest.json", import.meta.url), "utf8"),
   ]);
   assert.ok(popup.indexOf('src="extract-job-posting.js"') < popup.indexOf('src="popup.js"'));
-  assert.equal(JSON.parse(manifestText).version, "1.1.5");
+  const popupScript = await readFile(new URL("../extensions/applitrail-job-importer/popup.js", import.meta.url), "utf8");
+  assert.match(popupScript, /allFrames:\s*true/);
+  assert.match(popupScript, /mergeFrameResults/);
+  assert.equal(JSON.parse(manifestText).version, "1.2.0");
 });
