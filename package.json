@@ -12,6 +12,7 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "test:runtime": "node scripts/smoke-standalone.mjs",
     "test:e2e": "npm run build && playwright test",
+    "test:ai:live": "node --env-file-if-exists=.env.local scripts/smoke-live-ai.mjs",
     "start:e2e": "node scripts/start-e2e.mjs",
     "test:portable": "node scripts/smoke-portable-stack.mjs",
     "check:hosted": "node scripts/check-hosted-health.mjs",

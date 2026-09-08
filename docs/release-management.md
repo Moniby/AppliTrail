@@ -16,6 +16,10 @@ Never copy production secrets, databases, uploaded CVs or customer records into 
 4. Production validation is started manually with the full approved revision and the confirmation `PUBLISH`.
 5. The validated revision is published to Sites only after owner approval. Production data resources and secrets remain attached rather than recreated.
 
+## Live AI verification
+
+Run `npm run test:ai:live` only when a staging OpenAI key is available and a live-generation check has been approved. The check creates a disposable local account and database, generates one tailored CV, cover letter, phone-screen brief and interview-practice brief, then verifies the four credit-audit entries. It never reads or writes staging or production customer records. The four API generations may incur a small OpenAI usage charge.
+
 The GitHub workflows validate release candidates but do not possess Sites deployment credentials and therefore cannot publish either environment by themselves.
 
 ## Rollback

@@ -58,6 +58,19 @@ test("uses direct navigation for the protected dashboard handoff", async () => {
   assert.match(landingSource, /href="\/signin"/);
 });
 
+test("keeps the published credit-rollover policy consistent", async () => {
+  const [terms, dashboard] = await Promise.all([
+    readFile(new URL("../app/terms/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard-client.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(terms, /Monthly-plan included credits reset each month and do not roll over/);
+  assert.match(terms, /Quarterly, six-month and Annual plans, unused included credits roll over/);
+  assert.match(terms, /without renewal, that balance expires at term end/);
+  assert.doesNotMatch(terms, /do not roll over, including when a subscription is prepaid/);
+  assert.match(dashboard, /Sign in to AppliTrail/);
+  assert.doesNotMatch(dashboard, /Sign in with ChatGPT/);
+});
+
 test("server-renders the browser extension installation guide", async () => {
   const response = await render("/extension");
   assert.equal(response.status, 200);
