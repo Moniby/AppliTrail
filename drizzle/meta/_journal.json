@@ -71,6 +71,13 @@
       "when": 1788891627256,
       "tag": "0009_robust_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788906022736,
+      "tag": "0010_damp_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }
