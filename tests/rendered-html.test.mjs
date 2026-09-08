@@ -470,7 +470,7 @@ test("labels staging and ships approval, monitoring, and rollback controls", asy
 
   assert.match(layout, /APPLITRAIL_ENVIRONMENT === "staging"/);
   assert.match(layout, /Private test environment/);
-  assert.match(styles, /\.environment-banner/);
+  assert.match(styles, /\.environment-banner\{position:fixed/);
   assert.match(health, /environment: process\.env\.APPLITRAIL_ENVIRONMENT/);
   assert.match(readiness, /environment: process\.env\.APPLITRAIL_ENVIRONMENT/);
   assert.match(staging, /environment: staging/);
