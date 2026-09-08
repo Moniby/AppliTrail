@@ -64,6 +64,13 @@
       "when": 1787544892334,
       "tag": "0008_flat_titanium_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788891627256,
+      "tag": "0009_robust_sasquatch",
+      "breakpoints": true
     }
   ]
 }
