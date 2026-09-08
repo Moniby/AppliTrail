@@ -4,7 +4,7 @@ This Chrome and Microsoft Edge extension captures a job advertisement only when 
 
 ## Install for beta testing
 
-1. Download the versioned `applitrail-job-importer-v1.1.5.zip` package from AppliTrail.
+1. Download the versioned `applitrail-job-importer-v1.2.0.zip` package from AppliTrail.
 2. Unzip it to a folder you will keep.
 3. In Chrome, open `chrome://extensions`; in Edge, open `edge://extensions`.
 4. Turn on **Developer mode**, choose **Load unpacked**, and select the unzipped folder.
@@ -14,8 +14,12 @@ The extension uses the current tab only after the user presses the capture butto
 
 ## LinkedIn job pages
 
-Version 1.1.5 anchors extraction to the selected job title and also reads the bounded visible header around that title. This captures LinkedIn salary, location, workplace arrangement and employment type even when signed-in LinkedIn pages rename or remove their internal CSS classes. It still reads preference chips, job-criteria fields, the base-pay section and the visible **About the job** content. Search results and search keywords are excluded from workplace-type detection. LinkedIn tracking parameters are also removed from the saved job link when a job ID is available.
+Version 1.2.0 anchors extraction to the selected job title and also reads the bounded visible header around that title. This captures LinkedIn salary, location, workplace arrangement and employment type even when signed-in LinkedIn pages rename or remove their internal CSS classes. It still reads preference chips, job-criteria fields, the base-pay section and the visible **About the job** content. Search results and search keywords are excluded from workplace-type detection. LinkedIn tracking parameters are also removed from the saved job link when a job ID is available.
 
 ## Indeed job pages
 
 Version 1.1.2 captures Indeed's visible **Full job description** section using both Indeed-specific page fields and a heading-based fallback. This keeps the description available even when Indeed changes its internal page class names.
+
+## Other career sites
+
+Version 1.2.0 adds a general career-portal extractor. It reads structured JobPosting data when present, recognizes common labelled fields and job-description headings, ignores generic shell titles such as “Recruitment”, and combines useful information found across embedded page frames. Portal-specific and generic results are always shown for review before saving.

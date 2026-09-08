@@ -50,6 +50,23 @@
       }
       return values.join(" · ");
     };
+    const pickBestWithin = (scopes, selectors, score, maximum = 40000, preserveLines = true) => {
+      const candidates = [];
+      const seen = new Set();
+      for (const currentScope of scopes) {
+        if (!currentScope?.querySelectorAll) continue;
+        for (const selector of selectors) {
+          for (const node of currentScope.querySelectorAll(selector)) {
+            if (seen.has(node)) continue;
+            seen.add(node);
+            const value = nodeText(node, maximum, preserveLines);
+            if (value) candidates.push({ value, score: score(value, node) });
+          }
+        }
+      }
+      candidates.sort((left, right) => right.score - left.score || right.value.length - left.value.length);
+      return candidates[0]?.score > 0 ? candidates[0].value : "";
+    };
     const flattenJsonLd = (entry) => {
       if (!entry) return [];
       if (Array.isArray(entry)) return entry.flatMap(flattenJsonLd);
@@ -65,6 +82,51 @@
     const host = window.location.hostname.toLowerCase();
     const isLinkedIn = host === "linkedin.com" || host.endsWith(".linkedin.com");
     const isIndeed = host === "indeed.com" || host.endsWith(".indeed.com");
+    const bodyText = nodeText(document.body, 160000, true);
+    const bodyLines = bodyText.split("\n").map((line) => tidy(line, 1000)).filter(Boolean);
+    const valueAfterLabel = (labels, maximum = 500) => {
+      for (let index = 0; index < bodyLines.length; index += 1) {
+        const line = bodyLines[index];
+        for (const label of labels) {
+          const inline = line.match(new RegExp("^" + label + "\\s*[:\\-]\\s*(.+)$", "i"));
+          if (inline?.[1]) return tidy(inline[1], maximum);
+          if (new RegExp("^" + label + "\\s*:?$", "i").test(line) && bodyLines[index + 1]) return tidy(bodyLines[index + 1], maximum);
+        }
+      }
+      return "";
+    };
+    const genericTitle = /^(?:recruitment|careers?|jobs?|job opportunities|current opportunities|vacancies|job details|position details|employment opportunities|please wait(?: \.\.\.)?)$/i;
+    const validTitle = (value) => {
+      const candidate = tidy(value, 300)
+        .replace(/\s*[|·-]\s*(?:Careers?|Recruitment|Jobs?)\s*$/i, "")
+        .trim();
+      return candidate && !genericTitle.test(candidate) ? candidate : "";
+    };
+    const semanticDescription = () => {
+      if (!bodyText) return "";
+      const headings = ["full job description", "job description", "position summary", "job summary", "about the role", "the role", "position overview", "role overview", "duties and responsibilities", "key responsibilities"];
+      const lower = bodyText.toLowerCase();
+      let start = -1;
+      let headingLength = 0;
+      for (const heading of headings) {
+        const pattern = new RegExp("(?:^|\\n)\\s*" + heading.replace(/ /g, "\\s+") + "\\s*(?:\\n|$)", "i");
+        const match = lower.search(pattern);
+        if (match >= 0 && (start < 0 || match < start)) {
+          start = match;
+          headingLength = bodyText.slice(match).match(new RegExp("^\\s*" + heading.replace(/ /g, "\\s+") + "\\s*", "i"))?.[0]?.length || heading.length;
+        }
+      }
+      if (start < 0) return "";
+      let candidate = bodyText.slice(start + headingLength).trim();
+      const endMarkers = ["Apply now", "Apply for this job", "Submit application", "Share this job", "Return to job search", "Back to opportunities", "Privacy statement"];
+      let end = candidate.length;
+      for (const marker of endMarkers) {
+        const markerIndex = candidate.toLowerCase().indexOf("\n" + marker.toLowerCase());
+        if (markerIndex >= 0 && markerIndex < end) end = markerIndex;
+      }
+      candidate = tidyDescription(candidate.slice(0, end), 40000);
+      return candidate.length >= 80 ? candidate : "";
+    };
 
     const topCard = isLinkedIn ? (
       document.querySelector(".job-details-jobs-unified-top-card")
@@ -129,7 +191,6 @@
         }
       }
       if (!description) {
-        const bodyText = nodeText(document.body, 100000, true);
         if (/about the job/i.test(bodyText)) description = cleanLinkedInDescription(bodyText);
       }
     }
@@ -176,19 +237,30 @@
         }
       }
       if (!description) {
-        const bodyText = nodeText(document.body, 100000, true);
         if (/full job description/i.test(bodyText)) description = cleanIndeedDescription(bodyText);
       }
     }
 
     const organization = jsonLd?.hiringOrganization;
-    if (!title) title = tidy(jsonLd?.title || pickWithin([document], isIndeed ? [
+    if (!title) title = validTitle(jsonLd?.title || pickWithin([document], isIndeed ? [
       '[data-testid="jobsearch-JobInfoHeader-title"]',
       ".jobsearch-JobInfoHeader-title",
       "h1",
       'meta[property="og:title"]',
       "title",
-    ] : ["h1", 'meta[property="og:title"]', "title"], 300), 300);
+    ] : [
+      '[itemprop="title"]',
+      '[data-testid*="job-title"]',
+      '[data-testid*="jobTitle"]',
+      '[class*="job-title"]',
+      '[class*="jobTitle"]',
+      '[id*="job-title"]',
+      '[id*="jobTitle"]',
+      "h1",
+      'meta[property="og:title"]',
+      "title",
+    ], 300));
+    if (!title) title = validTitle(valueAfterLabel(["job title", "position title", "posting title", "role title", "position"], 300));
     if (isLinkedIn) title = title.replace(/\s*[|·-]\s*LinkedIn\s*$/i, "").trim();
     if (!company) company = tidy(typeof organization === "object" ? organization?.name : organization || pickWithin([document], isIndeed ? [
       '[data-testid="inlineHeader-companyName"]',
@@ -197,9 +269,38 @@
       '[data-testid*="company"]',
       '[class*="company"]',
       '[class*="employer"]',
-    ] : ['[data-testid*="company"]', '[class*="company"]', '[class*="employer"]'], 300), 300);
+    ] : [
+      '[itemprop="hiringOrganization"]',
+      '[data-testid*="company"]',
+      '[class*="company"]',
+      '[class*="employer"]',
+      'meta[property="og:site_name"]',
+    ], 300), 300);
+    if (!company) company = valueAfterLabel(["company", "organization", "employer", "hospital"], 300);
+    if (!company && (host === "erecruiter.qch.on.ca" || host.endsWith(".qch.on.ca"))) company = "Queensway Carleton Hospital";
     if (isLinkedIn && company && title.toLowerCase().endsWith(`| ${company}`.toLowerCase())) title = title.slice(0, -company.length - 2).trim();
-    if (!description) description = tidyDescription(jsonLd?.description || pickWithin([document], ['[data-testid*="description"]', '[class*="job-description"]', '[id*="job-description"]', "main article"], 40000, true), 40000);
+    if (!description) description = tidyDescription(jsonLd?.description || pickBestWithin([document], [
+      '[itemprop="description"]',
+      '[data-testid*="description"]',
+      '[class*="job-description"]',
+      '[class*="jobDescription"]',
+      '[id*="job-description"]',
+      '[id*="jobDescription"]',
+      '[class*="vacancy-detail"]',
+      '[class*="posting-detail"]',
+      '[class*="job-detail"]',
+      "main article",
+      "main",
+      '[role="main"]',
+    ], (value) => {
+      const lower = value.toLowerCase();
+      const sectionSignals = ["responsibil", "qualification", "requirement", "experience", "education", "job description", "position summary", "job summary", "about the role"];
+      const shellSignals = ["sign in", "forgot password", "search jobs", "cookie", "privacy policy", "please wait"];
+      return Math.min(value.length, 12000)
+        + sectionSignals.reduce((score, signal) => score + (lower.includes(signal) ? 1200 : 0), 0)
+        - shellSignals.reduce((score, signal) => score + (lower.includes(signal) ? 900 : 0), 0);
+    }, 40000, true), 40000);
+    if (!description || description.length < 80) description = semanticDescription() || description;
 
     let headerContext = topCard ? nodeText(topCard, 5000, true) : "";
     let linkedInSemanticHeaderContext = "";
@@ -290,7 +391,8 @@
       ".jobsearch-JobInfoHeader-subtitle",
       '[data-testid*="location"]',
       '[class*="location"]',
-    ] : ['[data-testid*="location"]', '[class*="location"]'], 500), 500);
+    ] : ['[itemprop="jobLocation"]', '[data-testid*="location"]', '[class*="job-location"]', '[class*="jobLocation"]', '[class*="location"]'], 500)
+      || valueAfterLabel(["job location", "work location", "location", "site", "city"], 500), 500);
 
     const linkedInMetadata = isLinkedIn ? collectWithin(topCard ? [topCard, document] : [document], [
       ".job-details-jobs-unified-top-card__job-insight",
@@ -308,14 +410,17 @@
       '[class*="job-criteria"]',
     ]) : "";
     const linkedInCardEvidence = isLinkedIn ? tidyDescription([linkedInHeaderEvidence, linkedInLeadEvidence, linkedInMetadata].filter(Boolean).join("\n"), 45000) : "";
-    const employment = tidy([jsonLd?.employmentType, linkedInCardEvidence].filter(Boolean).join(" "), 5000).toLowerCase();
+    const genericEmploymentEvidence = !isLinkedIn
+      ? tidyDescription([bodyLines.slice(0, 100).join("\n"), description.slice(0, 5000)].join("\n"), 12000)
+      : "";
+    const employment = tidy([jsonLd?.employmentType, linkedInCardEvidence, genericEmploymentEvidence].filter(Boolean).join(" "), 15000).toLowerCase();
     const positionType = /\bcontract(?:or)?\b/.test(employment) ? "Contract"
       : /\bpart[ -]?time\b/.test(employment) ? "Part-time"
       : /\bintern(?:ship)?\b/.test(employment) ? "Internship"
       : /\bvolunteer\b/.test(employment) ? "Volunteer"
       : /\bfull[ -]?time\b/.test(employment) ? "Full-time"
       : "";
-    const workplaceEvidence = isLinkedIn ? linkedInCardEvidence.toLowerCase() : `${title} ${description}`.toLowerCase();
+    const workplaceEvidence = isLinkedIn ? linkedInCardEvidence.toLowerCase() : (title + " " + genericEmploymentEvidence).toLowerCase();
     const locationType = /\bremote\b/.test(workplaceEvidence) ? "Remote"
       : /\bhybrid\b/.test(workplaceEvidence) ? "Hybrid"
       : /\bon[ -]?site\b|\bin[ -]?office\b/.test(workplaceEvidence) ? "Onsite"
@@ -332,7 +437,13 @@
       linkedInCardEvidence,
     ].filter(Boolean).join("\n") : "";
     const linkedInCardSalary = linkedInSalaryEvidence.match(new RegExp(`${salaryAmountPattern}\\s*(?:-|–|—|to)\\s*${salaryAmountPattern}`, "i"))?.[0] || "";
-    const salary = tidy([jsonLd?.baseSalary?.currency, salaryRange, salaryValue?.unitText].filter(Boolean).join(" ") || linkedInCardSalary || pickWithin(linkedInScopes, ['[class*="salary"]'], 200), 200);
+    const genericSalaryEvidence = !isLinkedIn
+      ? bodyLines.slice(0, 120).join("\n") + "\n" + valueAfterLabel(["salary", "salary range", "compensation", "pay range"], 300)
+      : "";
+    const genericSalary = genericSalaryEvidence.match(new RegExp(salaryAmountPattern + "\\s*(?:-|–|—|to)\\s*" + salaryAmountPattern, "i"))?.[0]
+      || genericSalaryEvidence.match(new RegExp("(?:salary|compensation|pay range)\\s*[:\\-]?\\s*(" + salaryAmountPattern + ")", "i"))?.[1]
+      || "";
+    const salary = tidy([jsonLd?.baseSalary?.currency, salaryRange, salaryValue?.unitText].filter(Boolean).join(" ") || linkedInCardSalary || pickWithin(linkedInScopes, ['[class*="salary"]'], 200) || genericSalary, 200);
     let url = window.location.href;
     if (isLinkedIn) {
       const current = new URL(window.location.href);
