@@ -221,6 +221,9 @@ export function ApplicationCRMStudio({
 }) {
   const [contactDraft, setContactDraft] = useState({ name: "", role: "Recruiter", email: "", phone: "", linkedin: "", notes: "" });
   const [roundDraft, setRoundDraft] = useState({ type: "Hiring manager interview", date: "", time: "", format: "Video", interviewers: "", notes: "" });
+  const [showContactForm, setShowContactForm] = useState(false);
+  const [showRoundForm, setShowRoundForm] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(0);
   const contacts = application.contacts ?? [];
   const rounds = application.interviewRounds?.length ? application.interviewRounds : application.interviewDate ? [{ id: `legacy-${application.id}`, type: "Interview", date: application.interviewDate, time: application.interviewTime, timeZone: application.interviewTimeZone || timeZone }] : [];
   const completed = new Set(application.checklistCompleted ?? []);
@@ -238,6 +241,7 @@ export function ApplicationCRMStudio({
     const contact: CrmContact = { id: `contact-${Date.now()}`, name: contactDraft.name.trim(), role: contactDraft.role.trim() || "Hiring contact", email: contactDraft.email.trim() || undefined, phone: contactDraft.phone.trim() || undefined, linkedin: contactDraft.linkedin.trim() || undefined, notes: contactDraft.notes.trim() || undefined };
     saveContacts([...contacts, contact], "Contact added to this application");
     setContactDraft({ name: "", role: "Recruiter", email: "", phone: "", linkedin: "", notes: "" });
+    setShowContactForm(false);
   }
 
   function markContacted(contact: CrmContact) {
@@ -251,6 +255,7 @@ export function ApplicationCRMStudio({
     const nextUpcoming = nextRounds.find((item) => item.date >= new Date().toISOString().slice(0, 10)) ?? nextRounds.at(-1);
     updateApplication({ ...application, interviewRounds: nextRounds, interviewDate: nextUpcoming?.date || application.interviewDate, interviewTime: nextUpcoming?.time || application.interviewTime, interviewTimeZone: nextUpcoming?.timeZone || application.interviewTimeZone }, "Interview round added");
     setRoundDraft({ type: "Hiring manager interview", date: "", time: "", format: "Video", interviewers: "", notes: "" });
+    setShowRoundForm(false);
   }
 
   function updateRound(id: string, changes: Partial<InterviewRound>) {
@@ -283,7 +288,7 @@ export function ApplicationCRMStudio({
     </section>
 
     <section className="card crm-rounds">
-      <div className="crm-head"><div><p className="eyebrow">INTERVIEW JOURNEY</p><h2>Interview rounds</h2><p>Record every conversation separately, including its people, format, notes and outcome.</p></div><strong>{rounds.length}</strong></div>
+      <div className="crm-head"><div><p className="eyebrow">INTERVIEW JOURNEY</p><h2>Interview rounds</h2><p>Record every conversation separately, including its people, format, notes and outcome.</p></div><span className="crm-head-actions"><b>{rounds.length} {rounds.length===1?"round":"rounds"}</b><button type="button" onClick={()=>setShowRoundForm(value=>!value)}>{showRoundForm?"Cancel":"＋ Add round"}</button></span></div>
       {rounds.length > 0 && <div className="round-list">{rounds.map((round, index) => <article key={round.id}>
         <div className="round-number">{index + 1}</div><div className="round-fields">
           <label>Round type<input value={round.type} onChange={(event) => updateRound(round.id, { type: event.target.value })} /></label>
@@ -295,7 +300,7 @@ export function ApplicationCRMStudio({
           <label className="wide">Outcome<input value={round.outcome || ""} onChange={(event) => updateRound(round.id, { outcome: event.target.value })} placeholder="e.g. Advanced to technical interview" /></label>
         </div><button className="crm-remove" type="button" onClick={() => removeRound(round.id)}>Remove</button>
       </article>)}</div>}
-      <div className="crm-add-grid">
+      {showRoundForm&&<div className="crm-add-grid">
         <label>Round type<select value={roundDraft.type} onChange={(event) => setRoundDraft({ ...roundDraft, type: event.target.value })}><option>Recruiter screening</option><option>Hiring manager interview</option><option>Technical interview</option><option>Panel interview</option><option>Final interview</option><option>Other interview</option></select></label>
         <label>Date<input type="date" value={roundDraft.date} onChange={(event) => setRoundDraft({ ...roundDraft, date: event.target.value })} /></label>
         <label>Time <small>{timeZone}</small><input type="time" value={roundDraft.time} onChange={(event) => setRoundDraft({ ...roundDraft, time: event.target.value })} /></label>
@@ -303,14 +308,14 @@ export function ApplicationCRMStudio({
         <label className="wide">Interviewers<input value={roundDraft.interviewers} onChange={(event) => setRoundDraft({ ...roundDraft, interviewers: event.target.value })} placeholder="Names and roles, if known" /></label>
         <label className="wide">Preparation notes<textarea rows={3} value={roundDraft.notes} onChange={(event) => setRoundDraft({ ...roundDraft, notes: event.target.value })} placeholder="What you want to prepare or remember…" /></label>
         <button type="button" className="crm-add" onClick={addRound}>＋ Add interview round</button>
-      </div>
+      </div>}
     </section>
 
     <div className="crm-two-column">
       <section className="card crm-contacts">
-        <div className="crm-head"><div><p className="eyebrow">PEOPLE</p><h2>Contacts</h2><p>Keep recruiters, interviewers and referrals attached to this role.</p></div><strong>{contacts.length}</strong></div>
+        <div className="crm-head"><div><p className="eyebrow">PEOPLE</p><h2>Contacts</h2><p>Keep recruiters, interviewers and referrals attached to this role.</p></div><span className="crm-head-actions"><b>{contacts.length} {contacts.length===1?"contact":"contacts"}</b><button type="button" onClick={()=>setShowContactForm(value=>!value)}>{showContactForm?"Cancel":"＋ Add contact"}</button></span></div>
         {contacts.length > 0 && <div className="contact-list">{contacts.map((contact) => <article key={contact.id}><div><strong>{contact.name}</strong><span>{contact.role}</span>{contact.email && <a href={`mailto:${contact.email}`}>{contact.email}</a>}{contact.phone && <a href={`tel:${contact.phone}`}>{contact.phone}</a>}{contact.linkedin && <a href={contact.linkedin} target="_blank" rel="noreferrer">LinkedIn profile ↗</a>}{contact.notes && <small>{contact.notes}</small>}{contact.lastContactedAt && <em>Last contacted {new Date(contact.lastContactedAt).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" })}</em>}</div><div><button type="button" onClick={() => markContacted(contact)}>Log contact</button><button className="crm-remove" type="button" onClick={() => saveContacts(contacts.filter((item) => item.id !== contact.id), "Contact removed")}>Remove</button></div></article>)}</div>}
-        <div className="crm-contact-form">
+        {showContactForm&&<div className="crm-contact-form">
           <label>Name<input value={contactDraft.name} onChange={(event) => setContactDraft({ ...contactDraft, name: event.target.value })} placeholder="e.g. Jamie Chen" /></label>
           <label>Role<input value={contactDraft.role} onChange={(event) => setContactDraft({ ...contactDraft, role: event.target.value })} placeholder="Recruiter" /></label>
           <label>Email<input type="email" value={contactDraft.email} onChange={(event) => setContactDraft({ ...contactDraft, email: event.target.value })} /></label>
@@ -318,12 +323,13 @@ export function ApplicationCRMStudio({
           <label className="wide">LinkedIn URL<input type="url" value={contactDraft.linkedin} onChange={(event) => setContactDraft({ ...contactDraft, linkedin: event.target.value })} placeholder="https://linkedin.com/in/…" /></label>
           <label className="wide">Notes<textarea rows={2} value={contactDraft.notes} onChange={(event) => setContactDraft({ ...contactDraft, notes: event.target.value })} /></label>
           <button type="button" className="crm-add" onClick={addContact}>＋ Add contact</button>
-        </div>
+        </div>}
       </section>
 
       <section className="card crm-templates">
         <div className="crm-head"><div><p className="eyebrow">COMMUNICATION</p><h2>Message templates</h2><p>Copy a stage-appropriate starting point, personalize it and send it from your email.</p></div></div>
-        {templates.map((template) => { const body = template.body(application, primaryContact); return <article key={template.title}><div><strong>{template.title}</strong><span>Subject: {template.subject}</span></div><pre>{body}</pre><button type="button" onClick={() => copyTemplate(template.subject, body)}>Copy message</button></article>; })}
+        {templates.length>1&&<label className="crm-template-picker">Choose a message<select value={Math.min(selectedTemplate,templates.length-1)} onChange={event=>setSelectedTemplate(Number(event.target.value))}>{templates.map((template,index)=><option key={template.title} value={index}>{template.title}</option>)}</select></label>}
+        {templates.slice(Math.min(selectedTemplate,templates.length-1),Math.min(selectedTemplate,templates.length-1)+1).map((template) => { const body = template.body(application, primaryContact); return <article key={template.title}><div><strong>{template.title}</strong><span>Subject: {template.subject}</span></div><pre>{body}</pre><button type="button" onClick={() => copyTemplate(template.subject, body)}>Copy message</button></article>; })}
         <p className="crm-template-note">AppliTrail does not send messages automatically. Review and personalize every template before using it.</p>
       </section>
     </div>
