@@ -17,6 +17,10 @@ See [docs/cloud-architecture.md](docs/cloud-architecture.md) for the Azure migra
 boundary and [docs/portable-authentication.md](docs/portable-authentication.md) for
 the Google/email identity boundary.
 
+The Azure infrastructure and deployment workflow are prepared but disabled. See
+[docs/azure-deployment.md](docs/azure-deployment.md) for the controlled activation
+sequence; the current live site and customer data are not changed by these files.
+
 ## Local development
 
 Requirements: Node.js 22.13 or newer.
@@ -70,7 +74,10 @@ or Stripe keys in a Docker build argument, image, repository, or compose file.
   publishing it.
 - `Publish container` runs manually or for a `v*` tag and publishes immutable SHA
   and release tags to `ghcr.io/moniby/applitrail` with provenance and an SBOM.
-- Neither workflow deploys the application or changes the live public site.
+- `Deploy to Azure (prepared)` remains disabled until the repository-level variable
+  `AZURE_DEPLOYMENTS_ENABLED` is explicitly set to `true`. Once activated, successful
+  `main` builds deploy staging; production remains manually confirmed and protected.
+- The current Sites workflows and public site remain unchanged during preparation.
 
 ## Data safety during releases
 

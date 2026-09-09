@@ -1,0 +1,186 @@
+name: Deploy to Azure (prepared)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Azure environment to deploy
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      confirmation:
+        description: Type DEPLOY for staging or DEPLOY_PRODUCTION for production
+        required: true
+        type: string
+
+concurrency:
+  group: azure-${{ github.event_name == 'workflow_run' && 'staging' || inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy immutable AppliTrail container
+    if: >-
+      vars.AZURE_DEPLOYMENTS_ENABLED == 'true' &&
+      (
+        (github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main') ||
+        (github.event_name == 'workflow_dispatch' &&
+          ((inputs.environment == 'staging' && inputs.confirmation == 'DEPLOY') ||
+           (inputs.environment == 'production' && inputs.confirmation == 'DEPLOY_PRODUCTION')))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: ${{ github.event_name == 'workflow_run' && 'staging' || inputs.environment }}
+    env:
+      TARGET_ENVIRONMENT: ${{ github.event_name == 'workflow_run' && 'staging' || inputs.environment }}
+      RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'canadacentral' }}
+      APPLITRAIL_PUBLIC_URL: ${{ vars.APPLITRAIL_PUBLIC_URL }}
+      APPLIFLOW_ADMIN_EMAIL: ${{ vars.APPLIFLOW_ADMIN_EMAIL }}
+      AZURE_EXTERNAL_INGRESS: ${{ vars.AZURE_EXTERNAL_INGRESS || 'false' }}
+      STRIPE_PRODUCT_BASIC: ${{ vars.STRIPE_PRODUCT_BASIC }}
+      STRIPE_PRODUCT_STANDARD: ${{ vars.STRIPE_PRODUCT_STANDARD }}
+      STRIPE_PRICE_BASIC_MONTHLY: ${{ vars.STRIPE_PRICE_BASIC_MONTHLY }}
+      STRIPE_PRICE_BASIC_QUARTERLY: ${{ vars.STRIPE_PRICE_BASIC_QUARTERLY }}
+      STRIPE_PRICE_BASIC_SIX_MONTH: ${{ vars.STRIPE_PRICE_BASIC_SIX_MONTH }}
+      STRIPE_PRICE_BASIC_ANNUAL: ${{ vars.STRIPE_PRICE_BASIC_ANNUAL }}
+      STRIPE_PRICE_STANDARD_MONTHLY: ${{ vars.STRIPE_PRICE_STANDARD_MONTHLY }}
+      STRIPE_PRICE_STANDARD_QUARTERLY: ${{ vars.STRIPE_PRICE_STANDARD_QUARTERLY }}
+      STRIPE_PRICE_STANDARD_SIX_MONTH: ${{ vars.STRIPE_PRICE_STANDARD_SIX_MONTH }}
+      STRIPE_PRICE_STANDARD_ANNUAL: ${{ vars.STRIPE_PRICE_STANDARD_ANNUAL }}
+      STRIPE_PRICE_EXTRA_CREDIT: ${{ vars.STRIPE_PRICE_EXTRA_CREDIT }}
+      POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      APPLITRAIL_AUTH_GATEWAY_SECRET: ${{ secrets.APPLITRAIL_AUTH_GATEWAY_SECRET }}
+    steps:
+      - name: Check out the validated revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+
+      - name: Verify required environment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AZURE_RESOURCE_GROUP"
+          test -n "$POSTGRES_ADMIN_PASSWORD"
+          test -n "$OPENAI_API_KEY"
+          test -n "$STRIPE_SECRET_KEY"
+          test -n "$STRIPE_WEBHOOK_SECRET"
+          test -n "$APPLITRAIL_AUTH_GATEWAY_SECRET"
+
+      - name: Sign in to Azure without a stored password
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create the isolated environment resource group
+        run: az group create --name "$AZURE_RESOURCE_GROUP" --location "$AZURE_LOCATION" --output none
+
+      - name: Ensure required Azure resource providers are ready
+        shell: bash
+        run: |
+          set -euo pipefail
+          for provider in \
+            Microsoft.App \
+            Microsoft.ContainerRegistry \
+            Microsoft.DBforPostgreSQL \
+            Microsoft.Insights \
+            Microsoft.KeyVault \
+            Microsoft.ManagedIdentity \
+            Microsoft.OperationalInsights \
+            Microsoft.Storage
+          do
+            az provider register --namespace "$provider" --wait
+          done
+
+      - name: Prepare Azure Container Registry
+        id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          registry_name="$(az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/registry.bicep \
+            --parameters environmentName="$TARGET_ENVIRONMENT" location="$AZURE_LOCATION" \
+            --query properties.outputs.containerRegistryName.value \
+            --output tsv)"
+          echo "name=$registry_name" >> "$GITHUB_OUTPUT"
+          echo "server=${registry_name}.azurecr.io" >> "$GITHUB_OUTPUT"
+
+      - name: Build immutable image
+        shell: bash
+        run: |
+          set -euo pipefail
+          az acr login --name "${{ steps.registry.outputs.name }}"
+          image="${{ steps.registry.outputs.server }}/applitrail:${RELEASE_SHA}"
+          docker build --build-arg APPLITRAIL_RELEASE="$RELEASE_SHA" --tag "$image" .
+          docker push "$image"
+          echo "APPLITRAIL_AZURE_IMAGE=$image" >> "$GITHUB_ENV"
+
+      - name: Provision Azure services and release the container
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group create \
+            --name "applitrail-${TARGET_ENVIRONMENT}-${RELEASE_SHA:0:12}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/main.bicep \
+            --parameters \
+              environmentName="$TARGET_ENVIRONMENT" \
+              location="$AZURE_LOCATION" \
+              containerImage="$APPLITRAIL_AZURE_IMAGE" \
+              enableExternalIngress="$AZURE_EXTERNAL_INGRESS" \
+              publicUrl="$APPLITRAIL_PUBLIC_URL" \
+              adminEmail="$APPLIFLOW_ADMIN_EMAIL" \
+              postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" \
+              openAiApiKey="$OPENAI_API_KEY" \
+              stripeSecretKey="$STRIPE_SECRET_KEY" \
+              stripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \
+              authGatewaySecret="$APPLITRAIL_AUTH_GATEWAY_SECRET" \
+              stripeProductBasic="$STRIPE_PRODUCT_BASIC" \
+              stripeProductStandard="$STRIPE_PRODUCT_STANDARD" \
+              stripePriceBasicMonthly="$STRIPE_PRICE_BASIC_MONTHLY" \
+              stripePriceBasicQuarterly="$STRIPE_PRICE_BASIC_QUARTERLY" \
+              stripePriceBasicSixMonth="$STRIPE_PRICE_BASIC_SIX_MONTH" \
+              stripePriceBasicAnnual="$STRIPE_PRICE_BASIC_ANNUAL" \
+              stripePriceStandardMonthly="$STRIPE_PRICE_STANDARD_MONTHLY" \
+              stripePriceStandardQuarterly="$STRIPE_PRICE_STANDARD_QUARTERLY" \
+              stripePriceStandardSixMonth="$STRIPE_PRICE_STANDARD_SIX_MONTH" \
+              stripePriceStandardAnnual="$STRIPE_PRICE_STANDARD_ANNUAL" \
+              stripePriceExtraCredit="$STRIPE_PRICE_EXTRA_CREDIT" \
+            --output none
+
+      - name: Verify the public environment when ingress is enabled
+        if: env.AZURE_EXTERNAL_INGRESS == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          fqdn="$(az containerapp show \
+            --name "applitrail-${TARGET_ENVIRONMENT}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+          npm run check:hosted -- "https://${fqdn}"
+
+      - name: Record the immutable release
+        run: |
+          echo "## Azure ${TARGET_ENVIRONMENT} deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Revision: \`${RELEASE_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: \`${APPLITRAIL_AZURE_IMAGE}\`" >> "$GITHUB_STEP_SUMMARY"

@@ -73,6 +73,12 @@ Application releases and data migrations are different operations:
 7. Keep Cloudflare read-only and the previous image available through the agreed
    rollback window.
 
+The reproducible Azure resources are defined in `infra/azure/main.bicep`. The
+prepared GitHub workflow in `.github/workflows/azure-deploy.yml` is disabled unless
+the repository-level `AZURE_DEPLOYMENTS_ENABLED` variable is explicitly set to
+`true`. See `docs/azure-deployment.md` for activation, permissions, environment
+configuration, data-safety gates and rollback instructions.
+
 ## AWS equivalent
 
 The same container and contracts map to ECS/Fargate, RDS PostgreSQL, S3, Secrets

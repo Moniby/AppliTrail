@@ -434,7 +434,7 @@ test("declares portable account, database and file-storage boundaries", async ()
 });
 
 test("ships a container-safe runtime and GitHub Actions release path", async () => {
-  const [database, worker, contracts, runtime, nodeRuntime, postgresRuntime, azureRuntime, identity, backup, dockerfile, compose, ci, release, nextConfig, packageJson, health, readiness] = await Promise.all([
+  const [database, worker, contracts, runtime, nodeRuntime, postgresRuntime, azureRuntime, identity, backup, dockerfile, compose, ci, release, azureDeploy, azureMain, azureRegistry, azureGuide, nextConfig, packageJson, health, readiness] = await Promise.all([
     readFile(new URL("../db/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
     readFile(new URL("../platform/contracts.ts", import.meta.url), "utf8"),
@@ -448,6 +448,10 @@ test("ships a container-safe runtime and GitHub Actions release path", async () 
     readFile(new URL("../compose.yaml", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
     readFile(new URL("../.github/workflows/container-release.yml", import.meta.url), "utf8"),
+    readFile(new URL("../.github/workflows/azure-deploy.yml", import.meta.url), "utf8"),
+    readFile(new URL("../infra/azure/main.bicep", import.meta.url), "utf8"),
+    readFile(new URL("../infra/azure/registry.bicep", import.meta.url), "utf8"),
+    readFile(new URL("../docs/azure-deployment.md", import.meta.url), "utf8"),
     readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../app/api/health/route.ts", import.meta.url), "utf8"),
@@ -483,6 +487,20 @@ test("ships a container-safe runtime and GitHub Actions release path", async () 
   assert.match(release, /ghcr\.io\/moniby\/applitrail/);
   assert.match(release, /provenance: true/);
   assert.match(release, /sbom: true/);
+  assert.match(ci, /az bicep build --file infra\/azure\/main\.bicep/);
+  assert.match(azureDeploy, /vars\.AZURE_DEPLOYMENTS_ENABLED == 'true'/);
+  assert.match(azureDeploy, /environment: \$\{\{ github\.event_name == 'workflow_run'/);
+  assert.match(azureDeploy, /inputs\.confirmation == 'DEPLOY_PRODUCTION'/);
+  assert.match(azureDeploy, /azure\/login@/);
+  assert.match(azureDeploy, /az acr login/);
+  assert.match(azureMain, /Microsoft\.App\/containerApps/);
+  assert.match(azureMain, /Microsoft\.DBforPostgreSQL\/flexibleServers/);
+  assert.match(azureMain, /Microsoft\.KeyVault\/vaults/);
+  assert.match(azureMain, /APPLITRAIL_AUTH_MODE.*gateway/s);
+  assert.match(azureMain, /enableExternalIngress bool = false/);
+  assert.match(azureRegistry, /Microsoft\.ContainerRegistry\/registries/);
+  assert.match(azureGuide, /does not migrate or delete/i);
+  assert.match(azureGuide, /AZURE_DEPLOYMENTS_ENABLED=false/);
   assert.match(nextConfig, /output: "standalone"/);
   assert.equal(JSON.parse(packageJson).dependencies.jspdf, "^4.2.1");
   assert.equal(JSON.parse(packageJson).dependencies.pg, "^8.23.0");
