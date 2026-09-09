@@ -7,7 +7,7 @@ export default function PrivacyPage() {
       <p className="eyebrow">PRIVACY</p>
       <h1>Your career information is personal.</h1>
       <p>Tompris Technologies Inc. operates AppliTrail. This notice explains how information is handled when you use the AppliTrail website, account workspace and browser extension.</p>
-      <p>AppliTrail stores your account identity, Master CV profiles, application records, uploaded resumes, generated documents, reminder settings, interview rounds, application checklists, hiring-contact details you choose to enter, AI usage, plan details, billing-event history and sign-in visit metadata so the service can provide its features across your devices.</p>
+      <p>AppliTrail stores your account identity, Master CV profiles, application records, uploaded resumes, application-specific document copies, generated documents, reminder settings, interview rounds, application checklists, hiring-contact details you choose to enter, AI usage, plan details, billing-event history and sign-in visit metadata so the service can provide its features across your devices.</p>
 
       <h2>How information is used</h2>
       <p>Your information is used to save your dashboard, extract editable information from an uploaded CV when requested, generate career materials, show reminders, enforce account allowances, maintain subscription and credit balances, provide support and protect the service from misuse. It is not made visible to other AppliTrail users.</p>
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
       <p>When you confirm CV extraction, the uploaded CV is sent to the configured OpenAI API to organize it into editable fields. When you request a tailored CV, cover letter, phone brief or interview preparation, the relevant job description and selected Master CV evidence are sent for that request.</p>
 
       <h2>Files and account deletion</h2>
-      <p>Uploaded resumes are stored privately. A newly uploaded CV is not added to the Master CV library until you review and save it. You can remove individual files, export your structured account data or permanently delete your account data from the Account page.</p>
+      <p>Uploaded resumes and application-specific document copies are stored privately. A newly uploaded CV is not added to the Master CV library until you review and save it. A document attached to an application is kept as a separate snapshot so later Master CV or draft edits do not change the recorded copy. You can remove individual files, export your structured account data or permanently delete your account data from the Account page.</p>
 
       <h2>Your responsibility</h2>
       <p>Review extracted and generated materials before use. Do not upload information you are not authorized to process. This notice may be updated as AppliTrail’s services and legal requirements develop.</p>

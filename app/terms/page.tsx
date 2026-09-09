@@ -27,6 +27,7 @@ export default function TermsPage() {
 
       <h2>Your content</h2>
       <p>You retain responsibility for the career information you upload. You grant AppliTrail permission to process it only as needed to provide the features you request.</p>
+      <p>You may attach a PDF or Word copy of the CV and cover letter used for an application. These files and generated-document snapshots are retained with that application until you remove them, delete the application or delete your account. Uploading or attaching a document does not use an AI credit.</p>
 
       <h2>Availability</h2>
       <p>The service may occasionally be unavailable or return incomplete results. Calendar files and in-app reminders are planning aids; verify deadlines and scheduled times independently.</p>
