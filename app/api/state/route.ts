@@ -48,6 +48,29 @@ function cleanResume(value: unknown) {
   return { id: text(resume.id, 80), name: text(resume.name, 300), size: Math.max(0, Number(resume.size) || 0), type: text(resume.type, 200), uploadedAt: text(resume.uploadedAt, 50) };
 }
 
+function cleanApplicationDocument(value: unknown) {
+  const item = value && typeof value === "object" ? value as Record<string, unknown> : null;
+  if (!item) return null;
+  const source = text(item.source, 40);
+  if (source !== "uploaded" && source !== "master" && source !== "tailored" && source !== "generated") return null;
+  const file = cleanResume(item.file);
+  const attachedAt = text(item.attachedAt, 50);
+  const submittedAt = text(item.submittedAt, 50);
+  const snapshotText = text(item.snapshotText, 120_000);
+  if (!file && !snapshotText) return null;
+  return {
+    source,
+    label: text(item.label, 300) || (source === "generated" ? "Generated cover letter" : "CV used"),
+    ...(file ? { file } : {}),
+    ...(snapshotText ? { snapshotText } : {}),
+    ...(item.profileSnapshot && typeof item.profileSnapshot === "object" ? { profileSnapshot: cleanProfile(item.profileSnapshot) } : {}),
+    ...(["classic-ats", "blue-professional"].includes(text(item.template, 80)) ? { template: text(item.template, 80) } : {}),
+    attachedAt: attachedAt && !Number.isNaN(Date.parse(attachedAt)) ? attachedAt : new Date().toISOString(),
+    ...(submittedAt && !Number.isNaN(Date.parse(submittedAt)) ? { submittedAt } : {}),
+    ...(text(item.notes, 5000) ? { notes: text(item.notes, 5000) } : {}),
+  };
+}
+
 function cleanState(value: unknown) {
   const state = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const masterCvs = (Array.isArray(state.masterCvs) ? state.masterCvs : []).slice(0, MAX_MASTER_CVS).map((item, index) => {
@@ -117,6 +140,11 @@ function cleanState(value: unknown) {
       };
     }).filter((round) => round.date);
     safe.checklistCompleted = Array.from(new Set((Array.isArray(app.checklistCompleted) ? app.checklistCompleted : []).map((item) => text(item, 160).replace(/[^a-z0-9-]/gi, "-")).filter(Boolean))).slice(0, 200);
+    const rawDocuments = app.documentsUsed && typeof app.documentsUsed === "object" ? app.documentsUsed as Record<string, unknown> : {};
+    safe.documentsUsed = {
+      cv: cleanApplicationDocument(rawDocuments.cv),
+      cover: cleanApplicationDocument(rawDocuments.cover),
+    };
     const rawReviewDecisions = app.tailoredCvReviewDecisions && typeof app.tailoredCvReviewDecisions === "object"
       ? app.tailoredCvReviewDecisions as Record<string, unknown>
       : {};
@@ -152,7 +180,7 @@ function cleanState(value: unknown) {
     reminderDaysBefore: Math.max(1, Math.min(30, Math.round(Number(rawPreferences.reminderDaysBefore) || 3))),
     followUpDays: Math.max(3, Math.min(60, Math.round(Number(rawPreferences.followUpDays) || 7))),
   };
-  return { schemaVersion: 10, apps, masterCvs, activeMasterCvId, preferences };
+  return { schemaVersion: 11, apps, masterCvs, activeMasterCvId, preferences };
 }
 
 export async function GET(request: Request) {

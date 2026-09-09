@@ -43,6 +43,10 @@ const frequentlyAskedQuestions = [
     answer: "Yes. You can maintain separate Master CVs for paths such as IT Support, Customer Support or Cloud and DevOps, then select the most relevant one when tailoring an application.",
   },
   {
+    question: "Can I attach a CV I created outside AppliTrail?",
+    answer: "Yes. Every application has a Documents used area where you can upload the exact PDF or Word CV and cover letter you submitted. You can also attach a snapshot of an AppliTrail-tailored document or an independent copy of an uploaded Master CV. Attaching documents does not use an AI credit.",
+  },
+  {
     question: "Does AppliTrail invent experience to match a job description?",
     answer: "No. AppliTrail tailors and reorganizes supported evidence from your selected Master CV, highlights gaps and asks you to verify missing experience rather than presenting unverified claims as fact.",
   },
