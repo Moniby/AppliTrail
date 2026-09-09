@@ -25,7 +25,12 @@ test("persists privacy-safe user issue reports and exposes them to administrator
   assert.match(dashboard, /Your problem reports/);
   assert.match(dashboard, /Send reply/);
   assert.match(dashboard, /Admin dashboard sections/);
+  assert.match(dashboard, /Search credit audit/);
+  assert.match(dashboard, /Search payment audit/);
+  assert.match(dashboard, /filteredCreditAudit/);
+  assert.match(dashboard, /filteredPaymentAudit/);
   assert.match(styles, /admin-section-nav/);
+  assert.match(styles, /admin-audit-search/);
   assert.match(route, /requestUser\(request\)/);
   assert.match(route, /rejectCrossSiteMutation\(request\)/);
   assert.match(route, /createSupportIssue/);
