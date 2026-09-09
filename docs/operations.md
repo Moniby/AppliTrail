@@ -11,6 +11,14 @@
 Never reuse database URLs, storage containers, identity tenants, Stripe webhook
 secrets or encryption secrets between staging and production.
 
+## Support email delivery
+
+Set `RESEND_API_KEY`, `SUPPORT_FROM_EMAIL` and `SUPPORT_ADMIN_EMAIL` independently
+in staging and production. The sender address must belong to a domain verified by
+the email provider. User reports, administrator replies and status updates remain
+stored in AppliTrail even if email delivery is unavailable. Urgent reports also
+notify the configured administrator address.
+
 ## Local portability proof
 
 `docker compose up --build -d` starts AppliTrail, PostgreSQL and the Azure Blob

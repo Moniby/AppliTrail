@@ -1132,7 +1132,7 @@ function supportReference(issueId: string) {
 
 async function sendSupportEmail(issueId: string, kind: "receipt" | "reply" | "status") {
   const db = getSqlDatabase();
-  const row = await db.prepare(`SELECT s.id, s.summary, s.status, s.admin_reply, u.email, u.display_name
+  const row = await db.prepare(`SELECT s.id, s.summary, s.details, s.priority, s.status, s.admin_reply, u.email, u.display_name
       FROM support_issues s JOIN users u ON u.id = s.user_id WHERE s.id = ?`).bind(issueId).first<Record<string, unknown>>();
   if (!row) return "not_found";
   const apiKey = process.env.RESEND_API_KEY?.trim();
@@ -1160,6 +1160,15 @@ async function sendSupportEmail(issueId: string, kind: "receipt" | "reply" | "st
       body: JSON.stringify({ from, to: [String(row.email)], subject, text: `${message}\n\nAppliTrail — a product of Tompris Technologies Inc.` }),
     });
     if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
+    const adminEmail = process.env.SUPPORT_ADMIN_EMAIL?.trim();
+    if (kind === "receipt" && row.priority === "urgent" && adminEmail) {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to: [adminEmail], subject: `Urgent AppliTrail report · ${reference}`,
+          text: `${name} (${String(row.email)}) submitted an urgent report.\n\n${String(row.summary)}\n\n${String(row.details || "No additional details.")}\n\nReview it in the AppliTrail Admin dashboard.` }),
+      }).catch(() => undefined);
+    }
     await db.prepare("UPDATE support_issues SET email_status = 'sent', last_emailed_at = CURRENT_TIMESTAMP WHERE id = ?").bind(issueId).run();
     return "sent";
   } catch {
@@ -1230,6 +1239,73 @@ export async function replyToSupportIssue(identity: Identity, issueId: string, m
   await sendSupportEmail(issueId, "reply");
 }
 
+export type AdminAuditKind = "credit" | "payment";
+
+export async function adminAudit(identity: Identity, kind: AdminAuditKind, filters: {
+  query?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+} = {}) {
+  const account = await ensureUser(identity);
+  if (!account.isAdmin) throw new Error("Administrator access is required.");
+  const query = (filters.query ?? "").trim().slice(0, 120);
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(filters.from ?? "") ? filters.from! : "";
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(filters.to ?? "") ? filters.to! : "";
+  const page = Math.max(1, Math.floor(filters.page ?? 1));
+  const pageSize = Math.max(1, Math.min(5_000, Math.floor(filters.pageSize ?? 50)));
+  const pattern = `%${query.toLowerCase().replace(/[!%_]/g, (character) => `!${character}`)}%`;
+  const bindings: Array<string | number> = [];
+  const clauses: string[] = [];
+  if (kind === "credit") {
+    clauses.push("a.status = 'succeeded'", "a.kind != 'resume_extract'");
+    if (query) {
+      clauses.push(`(LOWER(u.display_name) LIKE ? ESCAPE '!' OR LOWER(u.email) LIKE ? ESCAPE '!'
+        OR LOWER(a.kind) LIKE ? ESCAPE '!' OR LOWER(a.model) LIKE ? ESCAPE '!'
+        OR LOWER(a.credit_source) LIKE ? ESCAPE '!')`);
+      bindings.push(pattern, pattern, pattern, pattern, pattern);
+    }
+    if (from) { clauses.push("date(COALESCE(a.finished_at, a.created_at)) >= date(?)"); bindings.push(from); }
+    if (to) { clauses.push("date(COALESCE(a.finished_at, a.created_at)) <= date(?)"); bindings.push(to); }
+    const where = `WHERE ${clauses.join(" AND ")}`;
+    const count = await getSqlDatabase().prepare(`SELECT COUNT(*) AS count FROM ai_usage a JOIN users u ON u.id = a.user_id ${where}`)
+      .bind(...bindings).first<{ count: number }>();
+    const rows = await getSqlDatabase().prepare(`SELECT a.id, a.kind, a.model, a.input_tokens, a.output_tokens,
+        a.credit_source, COALESCE(a.finished_at, a.created_at) AS used_at, u.email, u.display_name
+        FROM ai_usage a JOIN users u ON u.id = a.user_id ${where}
+        ORDER BY COALESCE(a.finished_at, a.created_at) DESC LIMIT ? OFFSET ?`)
+      .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>();
+    const total = Number(count?.count ?? 0);
+    return { kind, query, from, to, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      entries: rows.results.map((row) => ({
+        id: Number(row.id), kind: String(row.kind), model: String(row.model),
+        inputTokens: Number(row.input_tokens), outputTokens: Number(row.output_tokens), usedAt: databaseTimestamp(row.used_at),
+        creditSource: row.credit_source === "purchased" ? "purchased" : row.credit_source === "rollover" ? "rollover" : "monthly",
+        email: String(row.email), displayName: String(row.display_name),
+      })) };
+  }
+  if (query) {
+    clauses.push(`(LOWER(u.display_name) LIKE ? ESCAPE '!' OR LOWER(u.email) LIKE ? ESCAPE '!'
+      OR LOWER(b.kind) LIKE ? ESCAPE '!' OR LOWER(b.product_id) LIKE ? ESCAPE '!'
+      OR LOWER(b.gateway) LIKE ? ESCAPE '!' OR LOWER(b.status) LIKE ? ESCAPE '!')`);
+    bindings.push(pattern, pattern, pattern, pattern, pattern, pattern);
+  }
+  if (from) { clauses.push("date(b.created_at) >= date(?)"); bindings.push(from); }
+  if (to) { clauses.push("date(b.created_at) <= date(?)"); bindings.push(to); }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const count = await getSqlDatabase().prepare(`SELECT COUNT(*) AS count FROM billing_transactions b JOIN users u ON u.id = b.user_id ${where}`)
+    .bind(...bindings).first<{ count: number }>();
+  const rows = await getSqlDatabase().prepare(`SELECT b.id, b.gateway, b.gateway_reference, b.kind, b.product_id,
+      b.plan, b.credits, b.amount_cents, b.currency, b.status, b.created_at, u.email, u.display_name
+      FROM billing_transactions b JOIN users u ON u.id = b.user_id ${where}
+      ORDER BY b.created_at DESC LIMIT ? OFFSET ?`)
+    .bind(...bindings, pageSize, (page - 1) * pageSize).all<Record<string, unknown>>();
+  const total = Number(count?.count ?? 0);
+  return { kind, query, from, to, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    entries: rows.results.map((row) => ({ ...billingTransaction(row), email: String(row.email), displayName: String(row.display_name) })) };
+}
+
 export async function adminSummary(identity: Identity, query = "") {
   const account = await ensureUser(identity);
   if (!account.isAdmin) throw new Error("Administrator access is required.");
@@ -1288,6 +1364,31 @@ export async function adminSummary(identity: Identity, query = "") {
       FROM support_issues s JOIN users u ON u.id = s.user_id
       ORDER BY CASE s.status WHEN 'open' THEN 0 WHEN 'investigating' THEN 1 ELSE 2 END,
         CASE s.priority WHEN 'urgent' THEN 0 ELSE 1 END, s.created_at DESC LIMIT 200`).all<Record<string, unknown>>();
+  const failedGenerationRows = await db.prepare(`SELECT a.id, a.kind, a.created_at, u.email, u.display_name
+      FROM ai_usage a JOIN users u ON u.id = a.user_id
+      WHERE a.status = 'failed' AND datetime(a.created_at) >= datetime(?)
+      ORDER BY a.created_at DESC LIMIT 10`).bind(dayAgo).all<Record<string, unknown>>();
+  const failedPaymentRows = await db.prepare(`SELECT b.id, b.kind, b.status, b.created_at, u.email, u.display_name
+      FROM billing_transactions b JOIN users u ON u.id = b.user_id
+      WHERE b.status NOT IN ('succeeded', 'pending') AND datetime(b.created_at) >= datetime(?)
+      ORDER BY b.created_at DESC LIMIT 10`).bind(dayAgo).all<Record<string, unknown>>();
+  const emailReady = Boolean(process.env.RESEND_API_KEY?.trim() && process.env.SUPPORT_FROM_EMAIL?.trim());
+  const alerts = [
+    ...(!emailReady ? [{ id: "configuration:support-email", category: "support", severity: "warning", title: "Support email delivery needs setup",
+      detail: "Reports and replies are saved in AppliTrail, but email receipts will begin only after the verified sender is connected.", createdAt: new Date().toISOString() }] : []),
+    ...issueRows.results.filter((row) => row.priority === "urgent" && row.status !== "resolved").slice(0, 10).map((row) => ({
+      id: `support:${String(row.id)}`, category: "support", severity: "urgent", title: `Urgent support report · ${supportReference(String(row.id))}`,
+      detail: `${String(row.display_name)} · ${String(row.summary)}`, createdAt: databaseTimestamp(row.created_at),
+    })),
+    ...failedGenerationRows.results.map((row) => ({
+      id: `generation:${String(row.id)}`, category: "generation", severity: "warning", title: "AI generation failed",
+      detail: `${String(row.display_name)} · ${String(row.email)} · ${String(row.kind).replace(/_/g, " ")}`, createdAt: databaseTimestamp(row.created_at),
+    })),
+    ...failedPaymentRows.results.map((row) => ({
+      id: `payment:${String(row.id)}`, category: "payment", severity: "urgent", title: "Payment needs attention",
+      detail: `${String(row.display_name)} · ${String(row.email)} · ${String(row.kind).replace(/_/g, " ")} · ${String(row.status)}`, createdAt: databaseTimestamp(row.created_at),
+    })),
+  ].sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   return {
     totals: { users: Number(totals?.users ?? 0), suspended: Number(totals?.suspended ?? 0),
       paidSubscribers: Number(totals?.paid_subscribers ?? 0), generations: Number(totals?.generations ?? 0),
@@ -1298,6 +1399,7 @@ export async function adminSummary(identity: Identity, query = "") {
       aiSucceeded24h: Number(health?.ai_succeeded ?? 0),
       aiFailed24h: Number(health?.ai_failed ?? 0),
       webhookIssues24h: Number(health?.webhook_issues ?? 0),
+      emailReady,
       openIssues: Number(health?.open_issues ?? 0),
       urgentIssues: Number(health?.urgent_issues ?? 0),
       environment: process.env.APPLITRAIL_ENVIRONMENT || "production",
@@ -1328,6 +1430,7 @@ export async function adminSummary(identity: Identity, query = "") {
     paymentAudit: paymentRows.results.map((row) => ({
       ...billingTransaction(row), email: String(row.email), displayName: String(row.display_name),
     })),
+    alerts,
     supportIssues: issueRows.results.map((row) => ({
       id: String(row.id), reference: supportReference(String(row.id)), category: String(row.category), priority: String(row.priority), summary: String(row.summary),
       details: String(row.details), screen: String(row.screen), release: String(row.release), status: String(row.status),
