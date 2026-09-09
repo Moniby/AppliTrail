@@ -90,12 +90,14 @@ test("paid customer can save, prepare, remind, reload, find, and delete an appli
 
   await expect(page.getByRole("heading", { name: "Application workspace" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Customer Journey Analyst" })).toBeVisible();
+  await page.getByRole("button", { name: /Follow-up/ }).click();
   const taskStudio = page.locator(".application-task-studio");
   await taskStudio.getByLabel("Task", { exact: true }).fill("Follow up with recruiter");
   await taskStudio.getByLabel("Reminder date", { exact: true }).fill("2026-09-15");
   await page.getByRole("button", { name: /Add reminder task/ }).click();
   await expect(page.getByText("Follow up with recruiter", { exact: true })).toBeVisible();
 
+  await page.getByRole("button", { name: /Preparation/ }).click();
   await page.getByRole("button", { name: /Tailor my CV/ }).click();
   await expect(page.getByRole("heading", { name: "Use 1 AI credit?" })).toBeVisible();
   await page.getByRole("button", { name: "Use 1 credit & generate" }).click();
