@@ -33,6 +33,11 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Validate Azure infrastructure templates
+        run: |
+          az bicep build --file infra/azure/registry.bicep --stdout > /dev/null
+          az bicep build --file infra/azure/main.bicep --stdout > /dev/null
+
       - name: Run cloud-ready checks
         run: npm run ci
 

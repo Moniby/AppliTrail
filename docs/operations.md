@@ -71,3 +71,11 @@ file counts plus file checksums before a production migration.
 
 See [release management](release-management.md) for environment separation,
 approval, monitoring and rollback instructions.
+
+## Prepared Azure pipeline
+
+Azure deployment is defined in `.github/workflows/azure-deploy.yml` and remains
+inactive while `AZURE_DEPLOYMENTS_ENABLED` is missing or set to `false`. This is a
+repository-level safety switch; environment-specific credentials and settings stay
+inside the protected GitHub `staging` and `production` environments. Follow
+`docs/azure-deployment.md` before enabling it.
