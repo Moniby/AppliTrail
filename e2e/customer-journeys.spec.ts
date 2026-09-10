@@ -117,7 +117,7 @@ test("paid customer can save, prepare, remind, reload, find, and delete an appli
   await page.getByRole("button", { name: /Applications/ }).click();
   await page.getByRole("button", { name: /Prepare for Customer Journey Analyst/i }).click();
 
-  await page.getByRole("button", { name: /^STEP 4 Preparation/ }).click();
+  await page.getByRole("button", { name: /^STEP 3 Preparation/ }).click();
   await page.getByRole("button", { name: /Tailor my CV/ }).click();
   await expect(page.getByRole("heading", { name: "Use 1 AI credit?" })).toBeVisible();
   await page.getByRole("button", { name: "Use 1 credit & generate" }).click();
