@@ -590,13 +590,14 @@ function ApplicationWorkspaceNav({tab,setTab,application}:{tab:ApplicationWorksp
  const attached=[application.documentsUsed?.cv,application.documentsUsed?.cover].filter(Boolean).length;
  const openTasks=(application.customTasks??[]).filter(task=>!task.completed).length;
  const preparationReady=(Object.keys(application.artifacts??{}) as ArtifactKind[]).filter(kind=>Boolean(application.artifacts?.[kind])).length;
- const tabs:Array<{id:ApplicationWorkspaceTab;label:string;detail:string}>=[
-  {id:"overview",label:"Overview",detail:"Role and timeline"},
-  {id:"documents",label:"Documents",detail:`${attached}/2 attached`},
-  {id:"follow-up",label:"Follow-up",detail:openTasks?`${openTasks} open task${openTasks===1?"":"s"}`:"Tasks and contacts"},
-  {id:"preparation",label:"Preparation",detail:preparationReady?`${preparationReady}/4 ready`:"CV, letter and prep"},
+ const tabs:Array<{id:ApplicationWorkspaceTab;label:string;detail:string;purpose:string}>=[
+  {id:"overview",label:"Overview",detail:"Role and timeline",purpose:"Review the role, status, dates and work arrangement."},
+  {id:"documents",label:"Documents",detail:`${attached}/2 attached`,purpose:"Keep the exact CV and cover letter used for this application."},
+  {id:"follow-up",label:"Follow-up",detail:openTasks?`${openTasks} open task${openTasks===1?"":"s"}`:"Tasks and contacts",purpose:"Schedule reminders, record contacts and manage interview rounds."},
+  {id:"preparation",label:"Preparation",detail:preparationReady?`${preparationReady}/4 ready`:"CV, letter and prep",purpose:"Create and review your tailored application materials."},
  ];
- return <nav className="application-workspace-tabs" aria-label="Application workspace">{tabs.map(item=><button key={item.id} type="button" className={tab===item.id?"active":""} aria-current={tab===item.id?"page":undefined} onClick={()=>setTab(item.id)}><strong>{item.label}</strong><span>{item.detail}</span></button>)}</nav>;
+ const activeIndex=tabs.findIndex(item=>item.id===tab),active=tabs[activeIndex],next=tabs[activeIndex+1];
+ return <section className="application-workspace-guide"><div className="application-workspace-guide-head"><div><p className="eyebrow">APPLICATION WORKFLOW</p><strong>{active.label}</strong><span>{active.purpose} Select any step below to move around this application.</span></div>{next?<button type="button" onClick={()=>setTab(next.id)}>Next: {next.label} <b>→</b></button>:<button type="button" onClick={()=>setTab("overview")}>Back to Overview <b>↺</b></button>}</div><nav className="application-workspace-tabs" aria-label="Application workspace">{tabs.map((item,index)=><button key={item.id} type="button" className={tab===item.id?"active":""} aria-current={tab===item.id?"step":undefined} onClick={()=>setTab(item.id)}><small>STEP {index+1}</small><strong>{item.label}</strong><span>{item.detail}</span></button>)}</nav><p className="application-workspace-context"><span aria-hidden="true">●</span> Working on <strong>{application.role}</strong> at {application.company}</p></section>;
 }
 
 function Action(props:{title:string;text:string;icon:string;onClick:()=>void;saved:boolean;active:boolean}){return <button type="button" className={`action${props.active?" active":""}`} onClick={props.onClick}><i>{props.icon}</i><div><strong>{props.title}</strong><span>{props.text}</span><small className="action-model">Uses 1 AI credit when generated</small>{props.saved&&<em>Saved draft</em>}</div><b>→</b></button>}

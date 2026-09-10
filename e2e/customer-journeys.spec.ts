@@ -90,6 +90,8 @@ test("paid customer can save, prepare, remind, reload, find, and delete an appli
 
   await expect(page.getByRole("heading", { name: "Application workspace" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Customer Journey Analyst" })).toBeVisible();
+  await expect(page.getByText("APPLICATION WORKFLOW")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Next: Documents/ })).toBeVisible();
   await page.getByRole("button", { name: /New application/ }).click();
   await expect(page.getByRole("heading", { name: "Add an application" })).toBeVisible();
   const modalLayer = await page.locator(".overlay").evaluate((element) => Number(getComputedStyle(element).zIndex));
@@ -97,6 +99,8 @@ test("paid customer can save, prepare, remind, reload, find, and delete an appli
   expect(modalLayer).toBeGreaterThan(workspaceLayer);
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("button", { name: /Follow-up/ }).click();
+  await expect(page.locator(".prep")).toBeHidden();
+  await expect(page.getByText(/Working on Customer Journey Analyst at World Class Systems/)).toBeVisible();
   const taskStudio = page.locator(".application-task-studio");
   await taskStudio.getByLabel("Task", { exact: true }).fill("Follow up with recruiter");
   await taskStudio.getByLabel("Reminder date", { exact: true }).fill("2026-09-15");
@@ -113,7 +117,7 @@ test("paid customer can save, prepare, remind, reload, find, and delete an appli
   await page.getByRole("button", { name: /Applications/ }).click();
   await page.getByRole("button", { name: /Prepare for Customer Journey Analyst/i }).click();
 
-  await page.getByRole("button", { name: /Preparation/ }).click();
+  await page.getByRole("button", { name: /^STEP 4 Preparation/ }).click();
   await page.getByRole("button", { name: /Tailor my CV/ }).click();
   await expect(page.getByRole("heading", { name: "Use 1 AI credit?" })).toBeVisible();
   await page.getByRole("button", { name: "Use 1 credit & generate" }).click();
