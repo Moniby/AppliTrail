@@ -103,6 +103,16 @@ test("paid customer can save, prepare, remind, reload, find, and delete an appli
   await page.getByRole("button", { name: /Add reminder task/ }).click();
   await expect(page.getByText("Follow up with recruiter", { exact: true })).toBeVisible();
 
+  await page.getByRole("button", { name: /Dashboard/ }).click();
+  await page.getByRole("tab", { name: /Reminders \(1\)/ }).click();
+  await page.getByRole("button", { name: "Cancel reminder" }).click();
+  await expect(page.getByRole("heading", { name: "Cancel this reminder?" })).toBeVisible();
+  await page.locator(".confirm-modal").getByRole("button", { name: "Cancel reminder" }).click();
+  await expect(page.getByRole("heading", { name: "You’re all caught up" })).toBeVisible();
+
+  await page.getByRole("button", { name: /Applications/ }).click();
+  await page.getByRole("button", { name: /Prepare for Customer Journey Analyst/i }).click();
+
   await page.getByRole("button", { name: /Preparation/ }).click();
   await page.getByRole("button", { name: /Tailor my CV/ }).click();
   await expect(page.getByRole("heading", { name: "Use 1 AI credit?" })).toBeVisible();
