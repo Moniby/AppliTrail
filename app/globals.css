@@ -213,6 +213,9 @@ body[data-application-tab="documents"] .prepgrid,body[data-application-tab="foll
 @media(max-width:650px){.staging-environment{padding-top:52px}.environment-banner{align-items:flex-start;gap:7px;min-height:52px;flex-direction:column;padding:7px 12px;text-align:left}.environment-banner strong{padding:3px 7px}.staging-environment aside#app-navigation{inset:52px auto 0 0;height:calc(100dvh - 52px)}.staging-environment .mobile-menu-backdrop{top:52px}.staging-environment .generation-progress-bar{top:68px}.staging-environment .mobile-menu-button{top:max(66px,calc(env(safe-area-inset-top) + 52px))}.staging-environment .shell{padding-top:86px}}
 @media print{.environment-banner{display:none!important}}
 
+/* Keep modal backdrops above sticky application workspace navigation. */
+.overlay{z-index:1000}
+
 /* Product ownership */
 .landing-footer>span{display:grid;gap:5px}.landing-footer>span small{color:#8290a3;font-size:10px}.signin-owner{margin:15px 0 0;color:#75849a;font-size:10px;text-align:center}.product-owner-note{margin:14px 0;color:#718097;font-size:10px;line-height:1.5}.billing-tax-note small{display:block;margin-top:7px;color:#5f7189;font-size:8px}.legal-updated{color:#60728a!important}
 @media(max-width:650px){.landing-footer{align-items:flex-start;gap:18px;flex-direction:column}.landing-footer>div{flex-wrap:wrap}}

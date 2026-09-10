@@ -90,6 +90,12 @@ test("paid customer can save, prepare, remind, reload, find, and delete an appli
 
   await expect(page.getByRole("heading", { name: "Application workspace" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Customer Journey Analyst" })).toBeVisible();
+  await page.getByRole("button", { name: /New application/ }).click();
+  await expect(page.getByRole("heading", { name: "Add an application" })).toBeVisible();
+  const modalLayer = await page.locator(".overlay").evaluate((element) => Number(getComputedStyle(element).zIndex));
+  const workspaceLayer = await page.locator(".application-workspace-tabs").evaluate((element) => Number(getComputedStyle(element).zIndex));
+  expect(modalLayer).toBeGreaterThan(workspaceLayer);
+  await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("button", { name: /Follow-up/ }).click();
   const taskStudio = page.locator(".application-task-studio");
   await taskStudio.getByLabel("Task", { exact: true }).fill("Follow up with recruiter");
