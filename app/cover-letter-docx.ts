@@ -34,7 +34,7 @@ function coverLetterParagraphs(content: string) {
     .map((block) => cleanText(block.replace(/\n+/g, " ")))
     .filter(Boolean)
     .map((text) => new Paragraph({
-      spacing: { after: 220, line: 320 },
+      spacing: { after: 150, line: 280 },
       children: [new TextRun({ text })],
     }));
 }
@@ -70,7 +70,7 @@ export async function createCoverLetterDocxBlob({
       default: {
         document: {
           run: { font: "Calibri", size: 22, color: "263A55" },
-          paragraph: { spacing: { after: 180, line: 320 } },
+          paragraph: { spacing: { after: 150, line: 280 } },
         },
       },
       paragraphStyles: [

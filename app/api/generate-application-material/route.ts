@@ -70,13 +70,16 @@ const artifactConfig: Record<
   cover: {
     model: "gpt-5.6-sol",
     label: "cover letter",
-    maxOutputTokens: 5_000,
-    task: `Write a targeted, polished cover letter.
-- Address the hiring manager generically unless a verified name is supplied.
-- Open with the exact role and a specific value proposition.
-- Use two or three evidence-rich examples tied to the vacancy without repeating the CV line by line.
-- Keep it to one page, approximately 300-450 words, with a confident and natural voice.
-- End with interest in discussing the role and a professional sign-off.`,
+    maxOutputTokens: 2_000,
+    task: `Write a targeted, polished cover letter that will fit on one standard page when downloaded.
+- Do not include a document heading, postal address block, date or subject line; AppliTrail formats those separately.
+- Begin with a brief professional salutation.
+- Write exactly four concise main paragraphs: an opening value proposition for the exact role; the strongest verified evidence; a second distinct evidence example connected to the employer's needs; and a specific explanation of motivation and fit.
+- Follow those four paragraphs with one short concluding paragraph expressing interest in discussing the role.
+- End with a professional sign-off using the applicant's verified name.
+- Keep the complete letter between 280 and 360 words and never exceed 400 words.
+- Use prose only: no headings, bullet lists, tables or repeated contact details.
+- Use a confident, natural voice, avoid repeating the CV line by line and never invent evidence.`,
   },
   phone: {
     model: "gpt-5.6-luna",
@@ -173,6 +176,10 @@ function outputText(response: OpenAIResponse) {
     }
   }
   return "";
+}
+
+function wordCount(value: unknown) {
+  return typeof value === "string" ? value.trim().split(/\s+/).filter(Boolean).length : 0;
 }
 
 function safeError(status: number, code = "", label = "application material") {
@@ -357,6 +364,13 @@ export async function POST(request: Request) {
 
   try {
     const result = JSON.parse(text) as Record<string, unknown>;
+    if (kind === "cover" && wordCount(result.document) > 400) {
+      await finishGeneration(generation.usageId, "failed").catch(() => undefined);
+      return Response.json(
+        { error: "The cover letter was longer than one page. Please regenerate it." },
+        { status: 502 },
+      );
+    }
     await finishGeneration(generation.usageId, "succeeded", responseBody.usage?.input_tokens ?? 0, responseBody.usage?.output_tokens ?? 0);
     return Response.json({ ...result, model: config.model });
   } catch {
